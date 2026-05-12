@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Camera, MessageCircle, Trophy, BookOpen, Waves, MapPin, Plus, Search, Heart, Thermometer, Wind,
-  Droplets, Fish, Shell, Shell, Upload, Flag, Compass, CalendarDays, Menu, X, LogIn, UserPlus,
+  Droplets, Fish, Shell, Upload, Flag, Compass, CalendarDays, Menu, X, LogIn, UserPlus,
   Map, Leaf, ChevronRight, Eye, Info, Navigation
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
