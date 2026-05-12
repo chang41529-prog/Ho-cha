@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import {
   Camera, MessageCircle, Trophy, BookOpen, Waves, MapPin, Plus, Search, Heart, Thermometer, Wind,
-  Droplets, Fish, Shell, Crab, Upload, Flag, Compass, CalendarDays, Menu, X, LogIn, UserPlus,
+  Droplets, Fish, Shell, shell, Upload, Flag, Compass, CalendarDays, Menu, X, LogIn, UserPlus,
   Map, Leaf, ChevronRight, Eye, Info, Navigation
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,7 +18,7 @@ const initialPosts = [
 ];
 
 const popularPosts = [
-  { id: 4, user: "갯바위킹", species: "꽃게", group: "crab", location: "여수 돌산", likes: 52, comments: 11, img: "https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=900&q=80", tag: "갑각류", date: "1일 전", caption: "밤에 족대로 잡았어요.", avatar: "🦀" },
+  { id: 4, user: "갯바위킹", species: "꽃게", group: "shell", location: "여수 돌산", likes: 52, comments: 11, img: "https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=900&q=80", tag: "갑각류", date: "1일 전", caption: "밤에 족대로 잡았어요.", avatar: "🦀" },
   { id: 5, user: "해루질매니아", species: "전복", group: "shell", location: "태안 안면도", likes: 47, comments: 9, img: "https://images.unsplash.com/photo-1515138692129-197a2c608cfd?auto=format&fit=crop&w=900&q=80", tag: "패류", date: "1일 전", caption: "해루질로 발견! 사이즈 괜찮네요.", avatar: "🐚" },
   { id: 6, user: "바다사랑", species: "도다리", group: "fish", location: "강릉 주문진", likes: 36, comments: 6, img: "https://images.unsplash.com/photo-1524704654690-b56c05c78a00?auto=format&fit=crop&w=900&q=80", tag: "물고기", date: "2일 전", caption: "주문진 방파제 근처에서 잡았습니다.", avatar: "🐠" },
 ];
@@ -33,13 +33,13 @@ const rankings = [
 
 const speciesBook = [
   { name: "쥐노래미", count: 42, season: "봄·가을", icon: Fish, point: "연안 암반·방파제 주변" },
-  { name: "꽃게", count: 31, season: "봄·여름", icon: Crab, point: "갯벌·연안 저층" },
+  { name: "꽃게", count: 31, season: "봄·여름", icon: shell, point: "갯벌·연안 저층" },
   { name: "고둥류", count: 57, season: "연중", icon: Shell, point: "조간대·항만 구조물" },
   { name: "망둑어류", count: 24, season: "여름", icon: Fish, point: "하구·얕은 연안" },
 ];
 
 function GroupIcon({ group }: { group: string }) {
-  if (group === "crab") return <Crab className="h-4 w-4" />;
+  if (group === "shell") return <shell className="h-4 w-4" />;
   if (group === "shell") return <Shell className="h-4 w-4" />;
   return <Fish className="h-4 w-4" />;
 }
