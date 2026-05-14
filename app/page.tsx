@@ -26,6 +26,7 @@ import {
   Shell,
   Thermometer,
   Trophy,
+  Trash2,
   Upload,
   User,
   UserPlus,
@@ -78,6 +79,7 @@ type Post = {
   date: string;
   avatar: string;
   isSample?: boolean;
+  likedByMe?: boolean;
 };
 
 type Comment = {
@@ -154,12 +156,13 @@ function mapDbPost(row: any): Post {
     temp: row.water_temp || undefined,
     wave: row.wave_height || undefined,
     caption: row.caption || "새로운 Ho-cha 기록입니다.",
-    likes: 0,
-    comments: 0,
+    likes: row.likes_count ?? row.likes ?? 0,
+    comments: row.comments_count ?? row.comments ?? 0,
     img: row.image_url || "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=80",
     tag: category === "shell" ? "패류" : category === "crab" ? "갑각류" : "물고기",
     date: formatDate(row.created_at),
     avatar: category === "shell" ? "🐚" : category === "crab" ? "🦀" : "🐟",
+    likedByMe: row.liked_by_me ?? false,
   };
 }
 
@@ -175,15 +178,36 @@ function SectionTitle({ title, desc, action }: { title: string; desc?: string; a
   );
 }
 
-function PostCard({ post, compact = false, onComments }: { post: Post; compact?: boolean; onComments: (post: Post) => void }) {
+function PostCard({
+  post,
+  compact = false,
+  currentUserId,
+  onComments,
+  onLike,
+  onDelete,
+}: {
+  post: Post;
+  compact?: boolean;
+  currentUserId?: string;
+  onComments: (post: Post) => void;
+  onLike: (post: Post) => void;
+  onDelete: (post: Post) => void;
+}) {
+  const canDelete = !post.isSample && Boolean(currentUserId) && post.user_id === currentUserId;
+
   return (
     <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-center gap-3 p-4">
         <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-lg">{post.avatar}</div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold text-slate-900">{post.user}</p>
-          <p className="truncate text-xs text-slate-500">{post.date} · {post.location}</p>
+          <p className="truncate text-xs text-slate-500">{post.date}{post.location ? ` · ${post.location}` : ""}</p>
         </div>
+        {canDelete && (
+          <button onClick={() => onDelete(post)} className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" title="내 게시글 삭제">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <img src={post.img} alt={post.species} className={`${compact ? "h-44" : "h-52"} w-full object-cover`} />
       <div className="p-4">
@@ -199,8 +223,12 @@ function PostCard({ post, compact = false, onComments }: { post: Post; compact?:
           {post.wave && <span className="rounded-full bg-slate-100 px-2 py-1">파고 {post.wave}</span>}
         </div>
         <div className="mt-4 flex items-center gap-4 text-sm text-slate-500">
-          <span className="flex items-center gap-1"><Heart className="h-4 w-4" />{post.likes}</span>
-          <button onClick={() => onComments(post)} className="flex items-center gap-1 hover:text-blue-600"><MessageCircle className="h-4 w-4" />댓글</button>
+          <button onClick={() => onLike(post)} className={`flex items-center gap-1 font-bold transition ${post.likedByMe ? "text-red-500" : "hover:text-red-500"}`}>
+            <Heart className={`h-4 w-4 ${post.likedByMe ? "fill-current" : ""}`} />{post.likes}
+          </button>
+          <button onClick={() => onComments(post)} className="flex items-center gap-1 hover:text-blue-600">
+            <MessageCircle className="h-4 w-4" />댓글 {post.comments}
+          </button>
           <button className="ml-auto flex items-center gap-1 text-xs text-slate-400"><Flag className="h-3.5 w-3.5" />신고</button>
         </div>
       </div>
@@ -260,7 +288,30 @@ export default function HoChaWebMVP() {
     if (!supabase) return;
     const { data, error } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
     if (!error && data) {
-      const mapped = data.map(mapDbPost);
+      const postIds = data.map((row: any) => row.id);
+      const [commentsResult, likesResult] = await Promise.all([
+        postIds.length ? supabase.from("comments").select("post_id").in("post_id", postIds) : Promise.resolve({ data: [] as any[] }),
+        postIds.length ? supabase.from("likes").select("post_id,user_id").in("post_id", postIds) : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      const commentCounts: Record<string, number> = {};
+      (commentsResult.data || []).forEach((item: any) => {
+        commentCounts[item.post_id] = (commentCounts[item.post_id] || 0) + 1;
+      });
+
+      const likeCounts: Record<string, number> = {};
+      const likedByMe = new Set<string>();
+      (likesResult.data || []).forEach((item: any) => {
+        likeCounts[item.post_id] = (likeCounts[item.post_id] || 0) + 1;
+        if (currentUser?.id && item.user_id === currentUser.id) likedByMe.add(item.post_id);
+      });
+
+      const mapped = data.map((row: any) => mapDbPost({
+        ...row,
+        likes_count: likeCounts[row.id] || 0,
+        comments_count: commentCounts[row.id] || 0,
+        liked_by_me: likedByMe.has(row.id),
+      }));
       setPosts(mapped.length > 0 ? mapped : samplePosts);
       setDbPostsLoaded(true);
     }
@@ -273,6 +324,10 @@ export default function HoChaWebMVP() {
     fetchPosts();
     return () => listener.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (supabase) fetchPosts();
+  }, [currentUser?.id]);
 
   useEffect(() => {
     return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
@@ -409,6 +464,40 @@ export default function HoChaWebMVP() {
     }
   };
 
+  const toggleLike = async (post: Post) => {
+    if (post.isSample) {
+      setPosts((prev) => prev.map((item) => item.id === post.id ? { ...item, likedByMe: !item.likedByMe, likes: item.likedByMe ? Math.max(0, item.likes - 1) : item.likes + 1 } : item));
+      return;
+    }
+    if (!supabase) return;
+    if (!currentUser) { openAuth("login"); return; }
+
+    const optimisticLiked = !post.likedByMe;
+    setPosts((prev) => prev.map((item) => item.id === post.id ? { ...item, likedByMe: optimisticLiked, likes: optimisticLiked ? item.likes + 1 : Math.max(0, item.likes - 1) } : item));
+
+    if (post.likedByMe) {
+      const { error } = await supabase.from("likes").delete().eq("post_id", post.id).eq("user_id", currentUser.id);
+      if (error) await fetchPosts();
+    } else {
+      const { error } = await supabase.from("likes").insert({ post_id: post.id, user_id: currentUser.id });
+      if (error) await fetchPosts();
+    }
+  };
+
+  const deletePost = async (post: Post) => {
+    if (!supabase || post.isSample) return;
+    if (!currentUser || post.user_id !== currentUser.id) return;
+    const ok = window.confirm("이 게시글을 삭제할까요? 삭제 후 되돌릴 수 없습니다.");
+    if (!ok) return;
+    const { error } = await supabase.from("posts").delete().eq("id", post.id).eq("user_id", currentUser.id);
+    if (error) {
+      alert(error.message || "삭제에 실패했습니다.");
+      return;
+    }
+    setPosts((prev) => prev.filter((item) => item.id !== post.id));
+    if (commentPost?.id === post.id) setCommentPost(null);
+  };
+
   const openComments = async (post: Post) => {
     setCommentPost(post);
     setComments([]);
@@ -423,7 +512,12 @@ export default function HoChaWebMVP() {
     if (!currentUser) { openAuth("login"); return; }
     if (!commentText.trim()) return;
     const { error } = await supabase.from("comments").insert({ post_id: commentPost.id, user_id: currentUser.id, content: commentText.trim() });
-    if (!error) { setCommentText(""); await openComments(commentPost); }
+    if (!error) {
+      setCommentText("");
+      setPosts((prev) => prev.map((item) => item.id === commentPost.id ? { ...item, comments: item.comments + 1 } : item));
+      setCommentPost((prev) => prev ? { ...prev, comments: prev.comments + 1 } : prev);
+      await openComments({ ...commentPost, comments: commentPost.comments + 1 });
+    }
   };
 
   const AuthButtons = () => currentUser ? (
@@ -451,15 +545,15 @@ export default function HoChaWebMVP() {
 
       {tab === "home" && <>
         <section className="relative overflow-hidden bg-slate-900"><div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center opacity-60" /><div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/60 to-slate-950/20" /><div className="relative mx-auto grid max-w-7xl gap-8 px-5 py-14 md:grid-cols-[1.25fr_0.75fr] md:items-center md:py-24"><motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}><h1 className="max-w-2xl text-5xl font-black leading-tight tracking-tight text-white md:text-7xl">연안의 모든 기록,<br />우리의 바다</h1><p className="mt-6 max-w-xl text-lg leading-8 text-slate-100">Ho-cha는 연안에서 만난 생물의 기록을 함께 나누는 공간입니다.</p><div className="mt-7 flex flex-wrap gap-3"><Button onClick={() => setTab("upload")} className="rounded-xl bg-blue-600 px-6 py-6 text-base font-black hover:bg-blue-700"><Camera className="mr-2 h-5 w-5" />기록 올리기</Button><Button onClick={() => setTab("feed")} variant="outline" className="rounded-xl border-white/30 bg-white/10 px-6 py-6 text-base font-black text-white hover:bg-white/20"><Eye className="mr-2 h-5 w-5" />둘러보기</Button></div><div className="mt-6 flex flex-wrap gap-2 text-sm text-white/90"><span className="rounded-full bg-white/15 px-3 py-1">사진 공유</span><span className="rounded-full bg-white/15 px-3 py-1">댓글 소통</span><span className="rounded-full bg-white/15 px-3 py-1">무료 GPS 기록</span><span className="rounded-full bg-white/15 px-3 py-1">도감 수집</span></div></motion.div><WeatherCard /></div></section>
-        <main className="mx-auto max-w-7xl px-5 py-8 md:py-10"><div className="grid gap-8 lg:grid-cols-[1fr_340px]"><div className="space-y-8"><section><SectionTitle title="오늘의 피드" desc={dbPostsLoaded && posts[0]?.isSample ? "아직 실제 기록이 없어 샘플을 보여줍니다." : "다른 사용자들이 올린 기록들입니다."} action="더보기" /><div className="grid gap-4 md:grid-cols-3">{posts.slice(0, 3).map((post) => <PostCard key={post.id} post={post} compact onComments={openComments} />)}</div></section><section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><SectionTitle title="최근 기록" desc="새로 올라온 기록이 이곳에 표시됩니다." action="더보기" /><div className="grid gap-4 md:grid-cols-3">{posts.slice(0, 3).map((post) => <PostCard key={`recent-${post.id}`} post={post} compact onComments={openComments} />)}</div></section></div><aside className="space-y-5"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><h3 className="mb-4 text-xl font-black">내 활동 요약</h3>{currentUser ? <><p className="text-sm text-slate-500">내가 올린 기록</p><p className="mt-2 text-4xl font-black text-blue-600">{currentUserPosts.length}<span className="text-xl">건</span></p><p className="mt-3 text-sm text-slate-500">기록 생물 {mySpeciesCount}종</p><Button onClick={() => setTab("profile")} variant="outline" className="mt-5 w-full rounded-xl bg-slate-50 font-bold">내 프로필 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button></> : <><p className="text-sm leading-6 text-slate-600">로그인하면 내 기록과 도감 현황을 따로 볼 수 있습니다.</p><Button onClick={() => openAuth("login")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">로그인</Button></>}</CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><h3 className="text-xl font-black">출현 모니터링</h3><div className="mt-4 grid h-44 place-items-center rounded-xl bg-gradient-to-br from-blue-50 to-slate-100 text-center"><div><Map className="mx-auto mb-2 h-10 w-10 text-blue-500" /><p className="text-sm font-bold text-slate-700">무료 GPS 좌표 저장</p><p className="mt-1 text-xs text-slate-500">공개 화면에는 권역만 표시</p></div></div><Button onClick={() => setTab("data")} variant="outline" className="mt-5 w-full rounded-xl bg-slate-50 font-bold">자세히 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button></CardContent></Card></aside></div><section className="mt-10 rounded-3xl bg-blue-50 p-6 md:p-8"><div className="grid gap-6 md:grid-cols-5 md:items-start"><div><h3 className="text-2xl font-black">Ho-cha 란?</h3><p className="mt-3 text-sm leading-6 text-slate-700">연안에서 만난 다양한 생물들을 기록하고 공유하며 우리의 바다를 함께 지켜가는 커뮤니티입니다.</p></div>{[[Camera, "기록하고 공유하기", "사진과 함께 생물 기록을 남겨주세요."], [MapPin, "위치 저장", "무료 GPS로 좌표를 저장하고 공개는 권역만 표시합니다."], [BookOpen, "도감 채우기", "다양한 생물을 발견하고 나만의 도감을 완성하세요."], [Leaf, "바다를 지키기", "정확한 기록이 깨끗한 바다를 만드는 첫걸음입니다."]].map(([Icon, title, desc]: any) => <div key={title} className="text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-blue-600 shadow-sm"><Icon className="h-6 w-6" /></div><p className="mt-3 font-black">{title}</p><p className="mt-2 text-sm leading-6 text-slate-600">{desc}</p></div>)}</div></section></main>
+        <main className="mx-auto max-w-7xl px-5 py-8 md:py-10"><div className="grid gap-8 lg:grid-cols-[1fr_340px]"><div className="space-y-8"><section><SectionTitle title="오늘의 피드" desc={dbPostsLoaded && posts[0]?.isSample ? "아직 실제 기록이 없어 샘플을 보여줍니다." : "다른 사용자들이 올린 기록들입니다."} action="더보기" /><div className="grid gap-4 md:grid-cols-3">{posts.slice(0, 3).map((post) => <PostCard key={post.id} post={post} compact currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section><section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><SectionTitle title="최근 기록" desc="새로 올라온 기록이 이곳에 표시됩니다." action="더보기" /><div className="grid gap-4 md:grid-cols-3">{posts.slice(0, 3).map((post) => <PostCard key={`recent-${post.id}`} post={post} compact currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section></div><aside className="space-y-5"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><h3 className="mb-4 text-xl font-black">내 활동 요약</h3>{currentUser ? <><p className="text-sm text-slate-500">내가 올린 기록</p><p className="mt-2 text-4xl font-black text-blue-600">{currentUserPosts.length}<span className="text-xl">건</span></p><p className="mt-3 text-sm text-slate-500">기록 생물 {mySpeciesCount}종</p><Button onClick={() => setTab("profile")} variant="outline" className="mt-5 w-full rounded-xl bg-slate-50 font-bold">내 프로필 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button></> : <><p className="text-sm leading-6 text-slate-600">로그인하면 내 기록과 도감 현황을 따로 볼 수 있습니다.</p><Button onClick={() => openAuth("login")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">로그인</Button></>}</CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><h3 className="text-xl font-black">출현 모니터링</h3><div className="mt-4 grid h-44 place-items-center rounded-xl bg-gradient-to-br from-blue-50 to-slate-100 text-center"><div><Map className="mx-auto mb-2 h-10 w-10 text-blue-500" /><p className="text-sm font-bold text-slate-700">무료 GPS 좌표 저장</p><p className="mt-1 text-xs text-slate-500">공개 화면에는 권역만 표시</p></div></div><Button onClick={() => setTab("data")} variant="outline" className="mt-5 w-full rounded-xl bg-slate-50 font-bold">자세히 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button></CardContent></Card></aside></div><section className="mt-10 rounded-3xl bg-blue-50 p-6 md:p-8"><div className="grid gap-6 md:grid-cols-5 md:items-start"><div><h3 className="text-2xl font-black">Ho-cha 란?</h3><p className="mt-3 text-sm leading-6 text-slate-700">연안에서 만난 다양한 생물들을 기록하고 공유하며 우리의 바다를 함께 지켜가는 커뮤니티입니다.</p></div>{[[Camera, "기록하고 공유하기", "사진과 함께 생물 기록을 남겨주세요."], [MapPin, "위치 저장", "무료 GPS로 좌표를 저장하고 공개는 권역만 표시합니다."], [BookOpen, "도감 채우기", "다양한 생물을 발견하고 나만의 도감을 완성하세요."], [Leaf, "바다를 지키기", "정확한 기록이 깨끗한 바다를 만드는 첫걸음입니다."]].map(([Icon, title, desc]: any) => <div key={title} className="text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-blue-600 shadow-sm"><Icon className="h-6 w-6" /></div><p className="mt-3 font-black">{title}</p><p className="mt-2 text-sm leading-6 text-slate-600">{desc}</p></div>)}</div></section></main>
       </>}
 
       {tab !== "home" && <main className="mx-auto max-w-7xl px-5 py-8 md:py-10">
-        {tab === "feed" && <section><SectionTitle title="실시간 Ho-cha 피드" desc="실제 사용자가 올린 사진 기록이 표시됩니다." /><div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="어종, 지역, 닉네임 검색" className="rounded-xl border-slate-200 bg-slate-50 pl-9" /></div><Button onClick={() => setTab("upload")} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700"><Plus className="mr-1 h-4 w-4" />기록 올리기</Button></div><div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filteredPosts.map((post) => <PostCard key={post.id} post={post} onComments={openComments} />)}</div></section>}
+        {tab === "feed" && <section><SectionTitle title="실시간 Ho-cha 피드" desc="실제 사용자가 올린 사진 기록이 표시됩니다." /><div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="어종, 지역, 닉네임 검색" className="rounded-xl border-slate-200 bg-slate-50 pl-9" /></div><Button onClick={() => setTab("upload")} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700"><Plus className="mr-1 h-4 w-4" />기록 올리기</Button></div><div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filteredPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section>}
 
         {tab === "upload" && <section className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"><div className="mb-6 flex items-start gap-4 rounded-2xl bg-blue-50 p-4"><Info className="mt-0.5 h-5 w-5 flex-none text-blue-600" /><div><h2 className="text-2xl font-black">새 기록 올리기</h2><p className="mt-2 text-sm leading-6 text-slate-600">지도 API 비용 없이 브라우저 GPS와 직접 입력을 함께 사용합니다. 좌표는 데이터용으로 저장하고, 공개 피드에는 권역명만 표시합니다.</p></div></div><div className="grid gap-4"><label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center hover:bg-blue-50"><input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e.target.files?.[0])} />{previewUrl ? <img src={previewUrl} alt="preview" className="mb-4 max-h-72 w-full rounded-2xl object-cover" /> : <Camera className="mb-3 h-10 w-10 text-blue-500" />}<p className="font-black">{selectedFile ? selectedFile.name : "사진 업로드 영역"}</p><p className="mt-1 text-sm text-slate-500">이 영역을 누르면 카메라 또는 앨범에서 사진을 선택할 수 있습니다.</p></label><div className="grid gap-3 md:grid-cols-2"><Input value={form.species} onChange={(e) => setForm({ ...form, species: e.target.value })} placeholder="생물명 예: 쥐노래미, 꽃게" className="rounded-xl border-slate-200 bg-slate-50" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"><option value="fish">물고기</option><option value="shell">패류·두족류</option><option value="crab">갑각류</option></select></div><div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800">위치 정보</p><p className="mt-1 text-xs leading-5 text-slate-500">무료 OpenStreetMap 미리보기와 좌표 저장을 함께 사용합니다. 정확 좌표는 DB에 저장하고, 피드에는 공개 지역명만 표시합니다. 현재 위치를 저장하면 가능한 경우 공개 지역명을 자동으로 입력합니다.</p></div><MapPin className="h-5 w-5 flex-none text-blue-500" /></div><div className="grid gap-2 md:grid-cols-[1fr_auto]"><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="공개 지역명 예: 부산 기장군 대라리, 부산광역시 연제구 연산9동" className="rounded-xl border-slate-200 bg-white" /><Button type="button" onClick={getCurrentLocation} variant="outline" className="rounded-xl bg-white"><Navigation className="mr-1 h-4 w-4" />현재 위치 저장</Button></div><div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]"><Input type="number" step="0.000001" value={locationInfo.latitude ?? ""} onChange={(e) => updateLatitude(e.target.value)} placeholder="위도 예: 35.076123" className="rounded-xl border-slate-200 bg-white" /><Input type="number" step="0.000001" value={locationInfo.longitude ?? ""} onChange={(e) => updateLongitude(e.target.value)} placeholder="경도 예: 129.064321" className="rounded-xl border-slate-200 bg-white" /><Button type="button" onClick={clearLocation} variant="outline" className="rounded-xl bg-white">좌표 초기화</Button></div><p className="mt-3 text-xs leading-5 text-slate-500">{locationMessage}</p><div className="mt-3"><CoordinateMap latitude={locationInfo.latitude} longitude={locationInfo.longitude} /></div>{locationInfo.latitude && locationInfo.longitude && <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-700">좌표 저장 준비 완료: {locationInfo.latitude.toFixed(6)}, {locationInfo.longitude.toFixed(6)} · 공개 화면에는 이 좌표가 표시되지 않습니다.</div>}</div><Input value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} placeholder="간단한 설명" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleUpload} disabled={uploading} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700 disabled:opacity-60"><Plus className="mr-2 h-5 w-5" />{uploading ? "업로드 중..." : "기록 올리기"}</Button>{uploadMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{uploadMessage}</p>}</div></section>}
 
-        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-4"><div className="grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-3xl">🐟</div><div><p className="text-lg font-black">{currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} onComments={openComments} />)}</div>}</div></div></>}</section>}
+        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-4"><div className="grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-3xl">🐟</div><div><p className="text-lg font-black">{currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
 
         {tab === "rank" && <section><SectionTitle title="월간 Ho-cha 랭킹" desc="종 다양성, 정확한 기록, 방류 인증을 중심으로 점수를 부여합니다." /><div className="grid gap-4 md:grid-cols-2">{rankings.map((item) => <Card key={item.rank} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-600">{item.rank}</div><div><p className="font-black">{item.avatar} {item.name}</p><p className="text-sm text-slate-500">기록 {item.score}</p></div></div><p className="text-lg font-black text-blue-600">{item.points} pt</p></CardContent></Card>)}</div></section>}
         {tab === "book" && <section><SectionTitle title="연안 도감" desc="기록된 생물은 도감에 자동 누적되며, 계절·지역·해황 정보와 연결됩니다." /><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{speciesBook.map((item) => { const Icon = item.icon; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Icon className="h-6 w-6" /></div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건</p><p className="mt-4 text-sm text-slate-600"><CalendarDays className="mr-1 inline h-4 w-4" /> {item.season}</p><p className="mt-2 text-sm text-slate-600"><Compass className="mr-1 inline h-4 w-4" /> {item.point}</p></CardContent></Card>; })}</div></section>}
