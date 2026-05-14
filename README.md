@@ -33,3 +33,9 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_xxxxxxxxx
 
 압축을 푼 뒤 안의 파일 전체를 기존 GitHub 저장소에 업로드해서 덮어씁니다.
 Commit changes 후 Vercel이 자동으로 재배포합니다.
+
+
+## 지도/좌표 기능
+- Google Maps API 없이 OpenStreetMap embed 지도를 사용합니다.
+- 현재 위치 버튼으로 GPS 좌표를 저장하거나 위도/경도를 직접 입력할 수 있습니다.
+- 공개 피드에는 권역명만 표시하고, 정확 좌표는 DB에 저장됩니다.
