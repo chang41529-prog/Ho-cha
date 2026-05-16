@@ -21,54 +21,49 @@ type Post = {
   profiles?: { nickname?: string | null; avatar_url?: string | null } | null;
   likes?: { user_id: string }[];
   comments?: { id: string }[];
-  identification_status?: string | null;
-  rarity?: string | null;
 };
 
 type Profile = { id: string; nickname: string | null; avatar_url?: string | null };
 
 type Comment = { id: string; post_id: string; user_id: string | null; content: string; created_at: string; profiles?: { nickname?: string | null } | null };
 
-type SpeciesMaster = {
-  id: string;
-  commonName: string;
-  scientificName: string;
-  category: string;
-  group: string;
-  aliases: string[];
-  rarity: "흔함" | "보통" | "드묾" | "주의";
-};
-
-const speciesMaster: SpeciesMaster[] = [
-  { id: "sebastes-inermis", commonName: "볼락", scientificName: "Sebastes inermis", category: "물고기", group: "볼락류", aliases: ["볼락류", "볼락", "뽈락", "rockfish"], rarity: "보통" },
-  { id: "sebastes-schlegelii", commonName: "조피볼락", scientificName: "Sebastes schlegelii", category: "물고기", group: "볼락류", aliases: ["우럭", "조피볼락", "볼락류", "rockfish"], rarity: "흔함" },
-  { id: "pagrus-major", commonName: "참돔", scientificName: "Pagrus major", category: "물고기", group: "돔류", aliases: ["참돔", "도미", "돔류", "돔", "red seabream"], rarity: "보통" },
-  { id: "acantho-pagrus", commonName: "감성돔", scientificName: "Acanthopagrus schlegelii", category: "물고기", group: "돔류", aliases: ["감성돔", "감시", "돔류", "도미"], rarity: "보통" },
-  { id: "ophiu-hali", commonName: "쥐노래미", scientificName: "Hexagrammos otakii", category: "물고기", group: "노래미류", aliases: ["쥐노래미", "노래미", "노래미류"], rarity: "흔함" },
-  { id: "lateolabrax", commonName: "농어", scientificName: "Lateolabrax japonicus", category: "물고기", group: "농어류", aliases: ["농어", "깔따구", "농어류", "sea bass"], rarity: "보통" },
-  { id: "paralichthys", commonName: "넙치", scientificName: "Paralichthys olivaceus", category: "물고기", group: "가자미류", aliases: ["넙치", "광어", "가자미류", "flatfish"], rarity: "보통" },
-  { id: "konosirus", commonName: "전어", scientificName: "Konosirus punctatus", category: "물고기", group: "청어류", aliases: ["전어", "청어류"], rarity: "흔함" },
-  { id: "sillago", commonName: "보리멸", scientificName: "Sillago japonica", category: "물고기", group: "보리멸류", aliases: ["보리멸", "모래무지", "보리멸류"], rarity: "보통" },
-  { id: "mugil", commonName: "숭어", scientificName: "Mugil cephalus", category: "물고기", group: "숭어류", aliases: ["숭어", "가숭어", "숭어류"], rarity: "흔함" },
-  { id: "portumnus", commonName: "꽃게", scientificName: "Portunus trituberculatus", category: "갑각류", group: "게류", aliases: ["꽃게", "게", "게류", "갑각류"], rarity: "보통" },
-  { id: "octopus", commonName: "문어류", scientificName: "Octopoda", category: "두족류", group: "문어류", aliases: ["문어", "문어류", "두족류"], rarity: "보통" },
-  { id: "sepia", commonName: "갑오징어류", scientificName: "Sepiidae", category: "두족류", group: "오징어류", aliases: ["갑오징어", "오징어", "두족류"], rarity: "보통" },
-  { id: "haliotis", commonName: "전복류", scientificName: "Haliotis", category: "패류", group: "패류", aliases: ["전복", "전복류", "패류", "조개"], rarity: "주의" },
-];
-
-function rarityClass(rarity?: string | null) {
-  if (rarity === "흔함") return "bg-slate-100 text-slate-700";
-  if (rarity === "보통") return "bg-blue-50 text-blue-700";
-  if (rarity === "드묾") return "bg-purple-50 text-purple-700";
-  if (rarity === "주의") return "bg-amber-50 text-amber-700";
-  return "bg-slate-100 text-slate-600";
-}
-
-
 const samplePosts: Post[] = [
   { id: "sample-1", user_id: null, species_name: "쥐노래미", category: "물고기", caption: "샘플 기록입니다. 로그인 후 실제 기록을 올릴 수 있습니다.", image_url: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=900&q=80", region: "부산 기장군 대라리", latitude: 35.240, longitude: 129.226, created_at: new Date().toISOString(), profiles: { nickname: "Ho-cha 사용자" }, likes: [], comments: [] },
   { id: "sample-2", user_id: null, species_name: "꽃게", category: "갑각류", caption: "정확한 좌표는 공개하지 않고 지역명만 표시됩니다.", image_url: "https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=900&q=80", region: "전남 여수시 돌산읍", latitude: 34.708, longitude: 127.765, created_at: new Date().toISOString(), profiles: { nickname: "연안기록자" }, likes: [], comments: [] }
 ];
+
+
+
+type SpeciesMaster = {
+  common: string;
+  scientific: string;
+  group: string;
+  category: string;
+  aliases: string[];
+  rarity: "흔함" | "보통" | "드묾" | "희귀" | "동정필요";
+};
+
+const speciesMaster: SpeciesMaster[] = [
+  { common: "감성돔", scientific: "Acanthopagrus schlegelii", group: "돔류", category: "물고기", aliases: ["돔", "도미", "흑돔", "감성도미"], rarity: "보통" },
+  { common: "참돔", scientific: "Pagrus major", group: "돔류", category: "물고기", aliases: ["돔", "도미", "빨간도미"], rarity: "보통" },
+  { common: "돌돔", scientific: "Oplegnathus fasciatus", group: "돔류", category: "물고기", aliases: ["돔", "줄돔"], rarity: "드묾" },
+  { common: "볼락", scientific: "Sebastes inermis", group: "볼락류", category: "물고기", aliases: ["볼락류", "뽈락", "열기"], rarity: "보통" },
+  { common: "조피볼락", scientific: "Sebastes schlegelii", group: "볼락류", category: "물고기", aliases: ["우럭", "볼락류", "검정우럭"], rarity: "흔함" },
+  { common: "쥐노래미", scientific: "Hexagrammos otakii", group: "노래미류", category: "물고기", aliases: ["노래미", "노래미류"], rarity: "흔함" },
+  { common: "망둑어류", scientific: "Gobiidae spp.", group: "망둑어류", category: "물고기", aliases: ["망둑어", "망둥어", "하구어"], rarity: "흔함" },
+  { common: "꽃게", scientific: "Portunus trituberculatus", group: "게류", category: "갑각류", aliases: ["게", "게류", "갑각류"], rarity: "보통" },
+  { common: "참소라", scientific: "Turbo sazae", group: "패류", category: "패류", aliases: ["소라", "고둥", "고둥류"], rarity: "보통" },
+  { common: "고둥류", scientific: "Gastropoda spp.", group: "패류", category: "패류", aliases: ["고둥", "소라", "패류"], rarity: "동정필요" },
+  { common: "갑오징어", scientific: "Sepia esculenta", group: "두족류", category: "두족류", aliases: ["오징어", "두족류", "갑오징어류"], rarity: "보통" },
+];
+
+function matchSpecies(query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return speciesMaster.slice(0, 5);
+  return speciesMaster
+    .filter((sp) => [sp.common, sp.scientific, sp.group, ...sp.aliases].some((v) => v.toLowerCase().includes(q)))
+    .slice(0, 6);
+}
 
 const fmt = (date?: string) => {
   if (!date) return "방금 전";
@@ -92,10 +87,8 @@ export default function Home() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState("");
   const [form, setForm] = useState({ species: "", category: "물고기", region: "", caption: "", latitude: "", longitude: "" });
-  const [speciesQuery, setSpeciesQuery] = useState("");
-  const [selectedSpecies, setSelectedSpecies] = useState<SpeciesMaster | null>(null);
-  const [identificationMode, setIdentificationMode] = useState<"standard" | "request">("standard");
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const speciesCandidates = useMemo(() => matchSpecies(form.species), [form.species]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -163,7 +156,7 @@ export default function Home() {
 
   async function uploadPost() {
     if (!supabase || !sessionUser) return alert("로그인이 필요합니다.");
-    if (!form.species.trim() && !speciesQuery.trim()) return alert("생물명을 입력하거나 동정 요청으로 저장해주세요.");
+    if (!form.species.trim()) return alert("생물명을 입력해주세요.");
     if (!form.region.trim()) return alert("공개 지역명을 입력해주세요.");
     if (!selectedFile) return alert("사진을 선택해주세요.");
     setUploading(true);
@@ -175,9 +168,9 @@ export default function Home() {
       const { data: publicUrl } = supabase.storage.from("post-images").getPublicUrl(path);
       const { error } = await supabase.from("posts").insert({
         user_id: sessionUser.id,
-        species_name: identificationMode === "standard" ? form.species.trim() : `동정 요청: ${speciesQuery.trim() || form.species.trim() || "미동정 생물"}`,
+        species_name: form.species.trim(),
         category: form.category,
-        caption: identificationMode === "request" ? `[동정 요청] ${form.caption.trim()}`.trim() : form.caption.trim(),
+        caption: form.caption.trim(),
         image_url: publicUrl.publicUrl,
         region: form.region.trim(),
         latitude: form.latitude ? Number(form.latitude) : null,
@@ -185,7 +178,6 @@ export default function Home() {
       });
       if (error) throw error;
       setForm({ species: "", category: "물고기", region: "", caption: "", latitude: "", longitude: "" });
-      setSpeciesQuery(""); setSelectedSpecies(null); setIdentificationMode("standard");
       setSelectedFile(null); setPreview(""); setTab("feed"); await fetchPosts();
     } catch (e: any) { alert(e.message || "업로드 실패"); } finally { setUploading(false); }
   }
@@ -236,11 +228,6 @@ export default function Home() {
   const mapPosts = posts.filter(p => p.latitude && p.longitude);
   const mapCenter = mapPosts[0] || { latitude: 35.1796, longitude: 129.0756 } as any;
   const mapSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${Number(mapCenter.longitude)-0.05}%2C${Number(mapCenter.latitude)-0.05}%2C${Number(mapCenter.longitude)+0.05}%2C${Number(mapCenter.latitude)+0.05}&layer=mapnik&marker=${mapCenter.latitude}%2C${mapCenter.longitude}`;
-  const speciesCandidates = useMemo(() => {
-    const q = speciesQuery.trim().toLowerCase();
-    if (!q) return speciesMaster.slice(0, 6);
-    return speciesMaster.filter(s => [s.commonName, s.scientificName, s.group, ...s.aliases].some(v => v.toLowerCase().includes(q))).slice(0, 8);
-  }, [speciesQuery]);
 
   return <div className="min-h-screen bg-slate-50 text-slate-900">
     <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur">
@@ -259,29 +246,7 @@ export default function Home() {
 
       {tab === "feed" && <section><div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h1 className="text-3xl font-black">실시간 피드</h1><p className="text-sm text-slate-500">시간 옆에는 공개 지역명만 표시됩니다.</p></div><div className="relative md:w-80"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><Input className="pl-9" placeholder="생물명, 지역 검색" value={query} onChange={e=>setQuery(e.target.value)}/></div></div><div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filteredPosts.map(p => <PostCard key={p.id} post={p} userId={sessionUser?.id} onLike={()=>toggleLike(p)} onComments={()=>loadComments(p.id)} onDelete={()=>deletePost(p)} isOpen={openComments===p.id} comments={comments[p.id] || []} commentText={commentText} setCommentText={setCommentText} addComment={()=>addComment(p.id)}/>)}</div></section>}
 
-      {tab === "upload" && <section className="mx-auto max-w-3xl"><Card><CardContent className="space-y-4"><h1 className="text-3xl font-black">새 기록 올리기</h1><div onClick={()=>fileRef.current?.click()} className="grid min-h-52 cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center hover:bg-blue-50">{preview ? <img src={preview} className="max-h-80 rounded-xl object-contain"/> : <div><Camera className="mx-auto mb-3 h-10 w-10 text-blue-500"/><b>사진 영역을 눌러 선택</b><p className="mt-1 text-sm text-slate-500">모바일에서는 카메라 또는 앨범 선택</p></div>}<input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e=>chooseFile(e.target.files?.[0])}/></div><div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <div className="mb-3 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-black">생물명 검색·동정</p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">이름을 정확히 몰라도 “돔류”, “볼락류”, “게류”처럼 검색하거나 동정 요청으로 저장할 수 있습니다.</p>
-                    </div>
-                    {selectedSpecies && <span className={`rounded-full px-2 py-1 text-xs font-bold ${rarityClass(selectedSpecies.rarity)}`}>{selectedSpecies.rarity}</span>}
-                  </div>
-                  <Input placeholder="예: 볼락류, 돔류, 감성돔, 우럭" value={speciesQuery} onChange={e=>{setSpeciesQuery(e.target.value); setIdentificationMode("standard");}} />
-                  <div className="mt-3 grid gap-2 md:grid-cols-2">
-                    {speciesCandidates.map(sp => (
-                      <button key={sp.id} type="button" onClick={() => { setSelectedSpecies(sp); setIdentificationMode("standard"); setForm({...form, species: sp.commonName, category: sp.category}); }} className={`rounded-xl border p-3 text-left transition hover:border-blue-400 hover:bg-blue-50 ${selectedSpecies?.id === sp.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-slate-50"}`}>
-                        <div className="flex items-center justify-between gap-2"><b>{sp.commonName}</b><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${rarityClass(sp.rarity)}`}>{sp.rarity}</span></div>
-                        <p className="mt-1 text-xs text-slate-500">{sp.group} · {sp.scientificName}</p>
-                      </button>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <Button type="button" variant={identificationMode === "request" ? "default" : "outline"} size="sm" onClick={() => { setIdentificationMode("request"); setSelectedSpecies(null); setForm({...form, species: speciesQuery || "미동정 생물", category: form.category}); }}>이름을 모르겠어요 · 동정 요청</Button>
-                    <Button type="button" variant="outline" size="sm" onClick={() => alert("AI 사진 동정은 다음 단계에서 연결할 예정입니다. 현재는 검색 후보와 동정 요청으로 기록을 보존합니다.")}>AI 후보 추천 준비중</Button>
-                  </div>
-                </div>
-                <div className="grid gap-3 md:grid-cols-2"><Input placeholder="선택된 표준명 또는 임시명" value={form.species} onChange={e=>{setForm({...form,species:e.target.value}); setSelectedSpecies(null);}}/><select className="rounded-xl border border-slate-200 px-3" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option>물고기</option><option>갑각류</option><option>패류</option><option>두족류</option><option>기타</option></select></div><Input placeholder="공개 지역명 예: 부산 기장군 대라리" value={form.region} onChange={e=>setForm({...form,region:e.target.value})}/><div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"><Input placeholder="위도" value={form.latitude} onChange={e=>setForm({...form,latitude:e.target.value})}/><Input placeholder="경도" value={form.longitude} onChange={e=>setForm({...form,longitude:e.target.value})}/><Button variant="outline" onClick={getLocation}><Navigation className="mr-1 h-4 w-4"/>현재 위치</Button></div>{form.latitude && form.longitude && <iframe title="selected map" className="h-64 w-full rounded-2xl border" src={`https://www.openstreetmap.org/export/embed.html?bbox=${Number(form.longitude)-0.01}%2C${Number(form.latitude)-0.01}%2C${Number(form.longitude)+0.01}%2C${Number(form.latitude)+0.01}&layer=mapnik&marker=${form.latitude}%2C${form.longitude}`}/>}<Input placeholder="설명" value={form.caption} onChange={e=>setForm({...form,caption:e.target.value})}/><Button onClick={uploadPost} disabled={uploading} className="h-12"><Upload className="mr-2 h-5 w-5"/>{uploading?"업로드 중":"기록 올리기"}</Button></CardContent></Card></section>}
+      {tab === "upload" && <section className="mx-auto max-w-3xl"><Card><CardContent className="space-y-4"><h1 className="text-3xl font-black">새 기록 올리기</h1><div onClick={()=>fileRef.current?.click()} className="grid min-h-52 cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center hover:bg-blue-50">{preview ? <img src={preview} className="max-h-80 rounded-xl object-contain"/> : <div><Camera className="mx-auto mb-3 h-10 w-10 text-blue-500"/><b>사진 영역을 눌러 선택</b><p className="mt-1 text-sm text-slate-500">모바일에서는 카메라 또는 앨범 선택</p></div>}<input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e=>chooseFile(e.target.files?.[0])}/></div><div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3"><p className="text-sm font-black text-slate-800">생물명 검색·표준종 연결</p><p className="mt-1 text-xs leading-5 text-slate-500">이름을 정확히 몰라도 볼락류, 돔류, 게류처럼 검색해 후보를 고를 수 있습니다. 모르면 동정 요청으로 저장하세요.</p></div><div className="grid gap-3 md:grid-cols-[1fr_150px]"><Input placeholder="예: 볼락류, 돔류, 감성돔, 우럭" value={form.species} onChange={e=>setForm({...form,species:e.target.value})}/><select className="rounded-xl border border-slate-200 bg-white px-3" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option>물고기</option><option>갑각류</option><option>패류</option><option>두족류</option><option>기타</option></select></div><div className="mt-3 grid gap-2">{speciesCandidates.map(sp=><button type="button" key={sp.common} onClick={()=>setForm({...form,species:sp.common,category:sp.category})} className="rounded-xl border border-slate-200 bg-white p-3 text-left text-sm hover:border-blue-300 hover:bg-blue-50"><span className="font-black text-slate-900">{sp.common}</span><span className="ml-2 rounded-full bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-600">{sp.group}</span><span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-bold text-slate-600">{sp.rarity}</span><p className="mt-1 text-xs text-slate-500">{sp.scientific} · 검색어: {sp.aliases.slice(0,3).join(", ")}</p></button>)}</div><button type="button" onClick={()=>setForm({...form,species: form.species.trim() ? `동정 요청: ${form.species.trim()}` : "동정 요청: 미동정 생물", category:"기타"})} className="mt-3 w-full rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-800 hover:bg-amber-100">이름이 확실하지 않음 · 동정 요청으로 저장</button></div><Input placeholder="공개 지역명 예: 부산 기장군 대라리" value={form.region} onChange={e=>setForm({...form,region:e.target.value})}/><div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"><Input placeholder="위도" value={form.latitude} onChange={e=>setForm({...form,latitude:e.target.value})}/><Input placeholder="경도" value={form.longitude} onChange={e=>setForm({...form,longitude:e.target.value})}/><Button variant="outline" onClick={getLocation}><Navigation className="mr-1 h-4 w-4"/>현재 위치</Button></div>{form.latitude && form.longitude && <iframe title="selected map" className="h-64 w-full rounded-2xl border" src={`https://www.openstreetmap.org/export/embed.html?bbox=${Number(form.longitude)-0.01}%2C${Number(form.latitude)-0.01}%2C${Number(form.longitude)+0.01}%2C${Number(form.latitude)+0.01}&layer=mapnik&marker=${form.latitude}%2C${form.longitude}`}/>}<Input placeholder="설명" value={form.caption} onChange={e=>setForm({...form,caption:e.target.value})}/><Button onClick={uploadPost} disabled={uploading} className="h-12"><Upload className="mr-2 h-5 w-5"/>{uploading?"업로드 중":"기록 올리기"}</Button></CardContent></Card></section>}
 
       {tab === "dogam" && <section><h1 className="text-3xl font-black">연안 도감</h1><p className="mt-1 text-sm text-slate-500">사용자가 올린 게시글을 생물명 기준으로 자동 집계합니다.</p><div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{dogam.length ? dogam.map(d=><Card key={d.name} className="overflow-hidden">{d.image && <img src={d.image} className="h-40 w-full object-cover"/>}<CardContent><div className="flex items-center justify-between"><h2 className="text-xl font-black"><BookOpen className="mr-1 inline h-5 w-5 text-blue-600"/>{d.name}</h2><span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-600">{d.count}건</span></div><p className="mt-3 text-sm text-slate-600">최근 기록: {fmt(d.latest)}</p><p className="mt-2 text-sm text-slate-600">기록 지역: {Array.from(d.regions).slice(0,3).join(", ") || "-"}</p></CardContent></Card>) : <p className="text-slate-500">아직 실제 기록이 없습니다.</p>}</div></section>}
 
@@ -297,5 +262,5 @@ export default function Home() {
 function PostCard({ post, userId, onLike, onComments, onDelete, isOpen, comments, commentText, setCommentText, addComment }: any) {
   const liked = post.likes?.some((l:any) => l.user_id === userId);
   const canDelete = userId && post.user_id === userId;
-  return <Card className="overflow-hidden"><div className="flex items-center justify-between p-4"><div><p className="font-black">{post.profiles?.nickname || "Ho-cha 사용자"}</p><p className="text-xs text-slate-500">{fmt(post.created_at)} · {post.region || "지역 미입력"}</p></div>{canDelete && <Button variant="ghost" size="sm" onClick={onDelete}><Trash2 className="h-4 w-4"/></Button>}</div>{post.image_url && <img src={post.image_url} className="h-64 w-full object-cover"/>}<CardContent><div className="mb-2 flex items-center gap-2"><h2 className="text-xl font-black">{post.species_name}</h2>{post.category && <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{post.category}</span>}{String(post.species_name).startsWith("동정 요청") && <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">동정 요청</span>}</div>{post.caption && <p className="mb-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{post.caption}</p>}<div className="flex items-center gap-4 text-sm"><button onClick={onLike} className={`flex items-center gap-1 font-bold ${liked ? "text-red-500" : "text-slate-500"}`}><Heart className={`h-5 w-5 ${liked ? "fill-red-500" : ""}`}/>{post.likes?.length || 0}</button><button onClick={onComments} className="flex items-center gap-1 font-bold text-slate-500"><MessageCircle className="h-5 w-5"/>댓글 {post.comments?.length || 0}</button></div>{isOpen && <div className="mt-4 border-t pt-4"><div className="space-y-2">{comments.map((c:any)=><div key={c.id} className="rounded-xl bg-slate-50 p-3 text-sm"><b>{c.profiles?.nickname || "사용자"}</b><p>{c.content}</p></div>)}</div><div className="mt-3 flex gap-2"><Input value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="댓글 입력"/><Button onClick={addComment}>등록</Button></div></div>}</CardContent></Card>;
+  return <Card className="overflow-hidden"><div className="flex items-center justify-between p-4"><div><p className="font-black">{post.profiles?.nickname || "Ho-cha 사용자"}</p><p className="text-xs text-slate-500">{fmt(post.created_at)} · {post.region || "지역 미입력"}</p></div>{canDelete && <Button variant="ghost" size="sm" onClick={onDelete}><Trash2 className="h-4 w-4"/></Button>}</div>{post.image_url && <img src={post.image_url} className="h-64 w-full object-cover"/>}<CardContent><div className="mb-2 flex items-center gap-2"><h2 className="text-xl font-black">{post.species_name}</h2>{post.category && <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{post.category}</span>}</div>{post.caption && <p className="mb-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{post.caption}</p>}<div className="flex items-center gap-4 text-sm"><button onClick={onLike} className={`flex items-center gap-1 font-bold ${liked ? "text-red-500" : "text-slate-500"}`}><Heart className={`h-5 w-5 ${liked ? "fill-red-500" : ""}`}/>{post.likes?.length || 0}</button><button onClick={onComments} className="flex items-center gap-1 font-bold text-slate-500"><MessageCircle className="h-5 w-5"/>댓글 {post.comments?.length || 0}</button></div>{isOpen && <div className="mt-4 border-t pt-4"><div className="space-y-2">{comments.map((c:any)=><div key={c.id} className="rounded-xl bg-slate-50 p-3 text-sm"><b>{c.profiles?.nickname || "사용자"}</b><p>{c.content}</p></div>)}</div><div className="mt-3 flex gap-2"><Input value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="댓글 입력"/><Button onClick={addComment}>등록</Button></div></div>}</CardContent></Card>;
 }
