@@ -60,6 +60,55 @@ const speciesBook = [
   { name: "망둑어류", count: 24, season: "여름", icon: Fish, point: "하구·얕은 연안" },
 ];
 
+
+const speciesCatalog = [
+  { standardName: "쥐노래미", scientificName: "Hexagrammos otakii", group: "노래미류", category: "fish", aliases: ["노래미", "쥐노래미", "놀래미"], rarity: "보통", note: "연안 암반과 방파제 주변에서 자주 기록되는 어류" },
+  { standardName: "조피볼락", scientificName: "Sebastes schlegelii", group: "볼락류", category: "fish", aliases: ["우럭", "볼락", "조피볼락", "볼락류"], rarity: "흔함", note: "낚시 기록이 많은 대표적인 연안 볼락류" },
+  { standardName: "감성돔", scientificName: "Acanthopagrus schlegelii", group: "돔류", category: "fish", aliases: ["감성돔", "감생이", "돔", "도미", "돔류"], rarity: "보통", note: "지역과 계절에 따라 출현 빈도 차이가 큰 돔류" },
+  { standardName: "참돔", scientificName: "Pagrus major", group: "돔류", category: "fish", aliases: ["참돔", "도미", "돔", "돔류"], rarity: "보통", note: "연안과 외해성 기록이 함께 나타날 수 있는 돔류" },
+  { standardName: "돌돔", scientificName: "Oplegnathus fasciatus", group: "돔류", category: "fish", aliases: ["돌돔", "갯돔", "돔류"], rarity: "드묾", note: "Ho-cha 내부 기록이 적으면 희귀도 후보로 다룰 수 있음" },
+  { standardName: "망둑어류", scientificName: "Gobiidae spp.", group: "망둑어류", category: "fish", aliases: ["망둑어", "망둥어", "하구", "갯벌"], rarity: "흔함", note: "정확한 종 동정이 어려우면 과/류 수준으로 기록 가능" },
+  { standardName: "꽃게", scientificName: "Portunus trituberculatus", group: "게류", category: "crab", aliases: ["꽃게", "게", "게류", "갑각류"], rarity: "보통", note: "갑각류 기록으로 분류" },
+  { standardName: "갑오징어", scientificName: "Sepia esculenta", group: "두족류", category: "shell", aliases: ["갑오징어", "오징어", "두족류", "문어", "낙지"], rarity: "보통", note: "두족류 기록으로 분류" },
+  { standardName: "고둥류", scientificName: "Gastropoda spp.", group: "패류", category: "shell", aliases: ["고둥", "소라", "패류", "조개", "복족류"], rarity: "흔함", note: "정확한 종을 모르면 패류/고둥류로 기록 가능" },
+];
+
+type SpeciesCandidate = (typeof speciesCatalog)[number];
+
+function findSpeciesCandidates(query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  return speciesCatalog
+    .filter((item) => [item.standardName, item.scientificName, item.group, ...item.aliases].some((v) => v.toLowerCase().includes(q)))
+    .slice(0, 6);
+}
+
+function getSpeciesMeta(name: string) {
+  const q = name.trim().toLowerCase();
+  if (!q) return null;
+  return speciesCatalog.find((item) => item.standardName.toLowerCase() === q || item.aliases.some((alias) => alias.toLowerCase() === q)) || null;
+}
+
+function getIdentificationStatus(post: Post) {
+  if (post.species.startsWith("동정 요청") || post.species.includes("미동정")) return { label: "동정 요청", tone: "amber", desc: "다른 사용자의 동정 도움이 필요한 기록" };
+  const meta = getSpeciesMeta(post.species);
+  if (meta) return { label: "표준종 연결", tone: "emerald", desc: `${meta.standardName} · ${meta.scientificName}` };
+  return { label: "미확인", tone: "slate", desc: "표준종 후보와 아직 연결되지 않은 기록" };
+}
+
+function getRecordQuality(post: Post) {
+  let score = 0;
+  if (post.img) score += 1;
+  if (post.location && post.location !== "지역 미입력") score += 1;
+  if (post.latitude && post.longitude) score += 1;
+  if (getSpeciesMeta(post.species)) score += 1;
+  if (post.caption && post.caption.length >= 5) score += 1;
+  if (post.comments > 0) score += 1;
+  if (score >= 5) return { label: "높음", score };
+  if (score >= 3) return { label: "보통", score };
+  return { label: "낮음", score };
+}
+
 type Post = {
   id: string;
   user_id?: string;
@@ -194,6 +243,8 @@ function PostCard({
   onDelete: (post: Post) => void;
 }) {
   const canDelete = !post.isSample && Boolean(currentUserId) && post.user_id === currentUserId;
+  const status = getIdentificationStatus(post);
+  const quality = getRecordQuality(post);
 
   return (
     <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
@@ -214,6 +265,8 @@ function PostCard({
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <h3 className="font-black text-slate-900">{post.species}</h3>
           <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{post.tag}</span>
+          <span className={`rounded-full px-2 py-1 text-xs font-bold ${status.tone === "emerald" ? "bg-emerald-50 text-emerald-700" : status.tone === "amber" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`} title={status.desc}>{status.label}</span>
+          <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">품질 {quality.label}</span>
           {post.latitude && post.longitude && <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">위치 저장됨</span>}
           {post.isSample && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">샘플</span>}
         </div>
@@ -263,6 +316,9 @@ export default function HoChaWebMVP() {
   const [posts, setPosts] = useState<Post[]>(samplePosts);
   const [dbPostsLoaded, setDbPostsLoaded] = useState(false);
   const [form, setForm] = useState({ species: "", location: "", caption: "", category: "fish" });
+  const [identificationMode, setIdentificationMode] = useState<"known" | "request">("known");
+  const [speciesQuery, setSpeciesQuery] = useState("");
+  const speciesSuggestions = useMemo(() => findSpeciesCandidates(speciesQuery), [speciesQuery]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
   const [uploading, setUploading] = useState(false);
@@ -282,7 +338,32 @@ export default function HoChaWebMVP() {
 
   const currentUserPosts = useMemo(() => posts.filter((post) => !post.isSample && post.user_id === currentUser?.id), [posts, currentUser]);
   const mySpeciesCount = useMemo(() => new Set(currentUserPosts.map((post) => post.species.trim()).filter(Boolean)).size, [currentUserPosts]);
+  const myVerifiedSpeciesCount = useMemo(() => new Set(currentUserPosts.filter((post) => getSpeciesMeta(post.species)).map((post) => post.species.trim())).size, [currentUserPosts]);
+  const myLocationCount = useMemo(() => new Set(currentUserPosts.map((post) => post.location).filter(Boolean)).size, [currentUserPosts]);
+  const myBadges = useMemo(() => {
+    const badges = [];
+    if (currentUserPosts.length >= 1) badges.push("첫 Ho-cha 기록");
+    if (mySpeciesCount >= 3) badges.push("3종 기록자");
+    if (mySpeciesCount >= 10) badges.push("10종 기록자");
+    if (currentUserPosts.some((post) => post.latitude && post.longitude)) badges.push("위치 기록자");
+    if (myLocationCount >= 3) badges.push("연안 탐험가");
+    if (currentUserPosts.some((post) => getIdentificationStatus(post).label === "동정 요청")) badges.push("동정 요청자");
+    return badges;
+  }, [currentUserPosts, mySpeciesCount, myLocationCount]);
   const filteredPosts = useMemo(() => posts.filter((post) => `${post.species} ${post.location} ${post.caption} ${post.user}`.toLowerCase().includes(query.toLowerCase())), [query, posts]);
+  const dogamItems = useMemo(() => {
+    const map = new Map<string, { name: string; count: number; locations: Set<string>; meta: SpeciesCandidate | null; requestCount: number }>();
+    posts.filter((post) => !post.isSample).forEach((post) => {
+      const meta = getSpeciesMeta(post.species);
+      const key = meta?.standardName || post.species || "미동정 생물";
+      const prev = map.get(key) || { name: key, count: 0, locations: new Set<string>(), meta, requestCount: 0 };
+      prev.count += 1;
+      if (post.location) prev.locations.add(post.location);
+      if (getIdentificationStatus(post).label === "동정 요청") prev.requestCount += 1;
+      map.set(key, prev);
+    });
+    return Array.from(map.values()).sort((a, b) => b.count - a.count);
+  }, [posts]);
 
   const fetchPosts = async () => {
     if (!supabase) return;
@@ -426,7 +507,8 @@ export default function HoChaWebMVP() {
     if (!supabase) { setUploadMessage("Supabase 연결이 필요합니다."); return; }
     if (!currentUser) { setUploadMessage("로그인 후 기록을 올릴 수 있습니다."); openAuth("login"); return; }
     if (!selectedFile) { setUploadMessage("사진을 선택해주세요."); return; }
-    if (!form.species.trim() || !form.location.trim()) { setUploadMessage("생물명과 공개 지역명은 필수입니다."); return; }
+    if (identificationMode === "known" && !form.species.trim()) { setUploadMessage("생물명을 입력하거나 동정 요청으로 올려주세요."); return; }
+    if (!form.location.trim()) { setUploadMessage("공개 지역명은 필수입니다."); return; }
 
     setUploading(true);
     setUploadMessage("업로드 중입니다...");
@@ -437,11 +519,13 @@ export default function HoChaWebMVP() {
       if (uploadError) throw uploadError;
 
       const { data: imageData } = supabase.storage.from("post-images").getPublicUrl(filePath);
+      const speciesNameForSave = identificationMode === "request" ? `동정 요청${form.species.trim() ? `: ${form.species.trim()}` : ""}` : form.species.trim();
+      const captionForSave = identificationMode === "request" ? `[동정 요청] ${form.caption.trim() || "이 생물의 이름을 알고 싶습니다."}` : form.caption.trim();
       const { error: insertError } = await supabase.from("posts").insert({
         user_id: currentUser.id,
-        species_name: form.species.trim(),
+        species_name: speciesNameForSave,
         category: form.category,
-        caption: form.caption.trim(),
+        caption: captionForSave,
         image_url: imageData.publicUrl,
         region: form.location.trim(),
         latitude: locationInfo.latitude,
@@ -450,6 +534,8 @@ export default function HoChaWebMVP() {
       if (insertError) throw insertError;
 
       setForm({ species: "", location: "", caption: "", category: "fish" });
+      setSpeciesQuery("");
+      setIdentificationMode("known");
       setLocationInfo({ latitude: null, longitude: null, accuracy: null });
       setLocationMessage("정확 좌표는 DB에만 저장하고, 피드에는 입력한 권역명만 표시합니다.");
       setSelectedFile(null);
@@ -551,14 +637,14 @@ export default function HoChaWebMVP() {
       {tab !== "home" && <main className="mx-auto max-w-7xl px-5 py-8 md:py-10">
         {tab === "feed" && <section><SectionTitle title="실시간 Ho-cha 피드" desc="실제 사용자가 올린 사진 기록이 표시됩니다." /><div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="어종, 지역, 닉네임 검색" className="rounded-xl border-slate-200 bg-slate-50 pl-9" /></div><Button onClick={() => setTab("upload")} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700"><Plus className="mr-1 h-4 w-4" />기록 올리기</Button></div><div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filteredPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section>}
 
-        {tab === "upload" && <section className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"><div className="mb-6 flex items-start gap-4 rounded-2xl bg-blue-50 p-4"><Info className="mt-0.5 h-5 w-5 flex-none text-blue-600" /><div><h2 className="text-2xl font-black">새 기록 올리기</h2><p className="mt-2 text-sm leading-6 text-slate-600">지도 API 비용 없이 브라우저 GPS와 직접 입력을 함께 사용합니다. 좌표는 데이터용으로 저장하고, 공개 피드에는 권역명만 표시합니다.</p></div></div><div className="grid gap-4"><label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center hover:bg-blue-50"><input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e.target.files?.[0])} />{previewUrl ? <img src={previewUrl} alt="preview" className="mb-4 max-h-72 w-full rounded-2xl object-cover" /> : <Camera className="mb-3 h-10 w-10 text-blue-500" />}<p className="font-black">{selectedFile ? selectedFile.name : "사진 업로드 영역"}</p><p className="mt-1 text-sm text-slate-500">이 영역을 누르면 카메라 또는 앨범에서 사진을 선택할 수 있습니다.</p></label><div className="grid gap-3 md:grid-cols-2"><Input value={form.species} onChange={(e) => setForm({ ...form, species: e.target.value })} placeholder="생물명 예: 쥐노래미, 꽃게" className="rounded-xl border-slate-200 bg-slate-50" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"><option value="fish">물고기</option><option value="shell">패류·두족류</option><option value="crab">갑각류</option></select></div><div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800">위치 정보</p><p className="mt-1 text-xs leading-5 text-slate-500">무료 OpenStreetMap 미리보기와 좌표 저장을 함께 사용합니다. 정확 좌표는 DB에 저장하고, 피드에는 공개 지역명만 표시합니다. 현재 위치를 저장하면 가능한 경우 공개 지역명을 자동으로 입력합니다.</p></div><MapPin className="h-5 w-5 flex-none text-blue-500" /></div><div className="grid gap-2 md:grid-cols-[1fr_auto]"><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="공개 지역명 예: 부산 기장군 대라리, 부산광역시 연제구 연산9동" className="rounded-xl border-slate-200 bg-white" /><Button type="button" onClick={getCurrentLocation} variant="outline" className="rounded-xl bg-white"><Navigation className="mr-1 h-4 w-4" />현재 위치 저장</Button></div><div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]"><Input type="number" step="0.000001" value={locationInfo.latitude ?? ""} onChange={(e) => updateLatitude(e.target.value)} placeholder="위도 예: 35.076123" className="rounded-xl border-slate-200 bg-white" /><Input type="number" step="0.000001" value={locationInfo.longitude ?? ""} onChange={(e) => updateLongitude(e.target.value)} placeholder="경도 예: 129.064321" className="rounded-xl border-slate-200 bg-white" /><Button type="button" onClick={clearLocation} variant="outline" className="rounded-xl bg-white">좌표 초기화</Button></div><p className="mt-3 text-xs leading-5 text-slate-500">{locationMessage}</p><div className="mt-3"><CoordinateMap latitude={locationInfo.latitude} longitude={locationInfo.longitude} /></div>{locationInfo.latitude && locationInfo.longitude && <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-700">좌표 저장 준비 완료: {locationInfo.latitude.toFixed(6)}, {locationInfo.longitude.toFixed(6)} · 공개 화면에는 이 좌표가 표시되지 않습니다.</div>}</div><Input value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} placeholder="간단한 설명" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleUpload} disabled={uploading} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700 disabled:opacity-60"><Plus className="mr-2 h-5 w-5" />{uploading ? "업로드 중..." : "기록 올리기"}</Button>{uploadMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{uploadMessage}</p>}</div></section>}
+        {tab === "upload" && <section className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"><div className="mb-6 flex items-start gap-4 rounded-2xl bg-blue-50 p-4"><Info className="mt-0.5 h-5 w-5 flex-none text-blue-600" /><div><h2 className="text-2xl font-black">새 기록 올리기</h2><p className="mt-2 text-sm leading-6 text-slate-600">생물명을 정확히 모르면 동정 요청으로 올릴 수 있습니다. 좌표는 데이터용으로 저장하고, 공개 피드에는 권역명만 표시합니다.</p></div></div><div className="grid gap-4"><label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center hover:bg-blue-50"><input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e.target.files?.[0])} />{previewUrl ? <img src={previewUrl} alt="preview" className="mb-4 max-h-72 w-full rounded-2xl object-cover" /> : <Camera className="mb-3 h-10 w-10 text-blue-500" />}<p className="font-black">{selectedFile ? selectedFile.name : "사진 업로드 영역"}</p><p className="mt-1 text-sm text-slate-500">이 박스를 눌러 사진을 선택하세요.</p></label><div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><p className="mb-3 text-sm font-black text-slate-800">생물 동정 정보</p><div className="mb-4 grid grid-cols-2 gap-2"><button type="button" onClick={() => setIdentificationMode("known")} className={`rounded-xl px-3 py-3 text-sm font-bold ${identificationMode === "known" ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>이름을 알고 있어요</button><button type="button" onClick={() => setIdentificationMode("request")} className={`rounded-xl px-3 py-3 text-sm font-bold ${identificationMode === "request" ? "bg-amber-500 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"}`}>동정 요청</button></div><Input value={speciesQuery} onChange={(e) => { setSpeciesQuery(e.target.value); setForm({ ...form, species: e.target.value }); }} placeholder={identificationMode === "known" ? "생물명 또는 그룹 검색 예: 볼락류, 돔류, 게류" : "모르면 비워두거나 특징 입력 예: 줄무늬 있는 작은 돔류"} className="rounded-xl border-slate-200 bg-white" />{speciesSuggestions.length > 0 && <div className="mt-3 grid gap-2">{speciesSuggestions.map((item) => <button key={item.standardName} type="button" onClick={() => { setForm({ ...form, species: item.standardName, category: item.category }); setSpeciesQuery(item.standardName); setIdentificationMode("known"); }} className="rounded-xl border border-slate-200 bg-white p-3 text-left hover:border-blue-300 hover:bg-blue-50"><div className="flex flex-wrap items-center gap-2"><span className="font-black text-slate-900">{item.standardName}</span><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{item.group}</span><span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {item.rarity}</span></div><p className="mt-1 text-xs italic text-slate-500">{item.scientificName}</p><p className="mt-1 text-xs text-slate-600">{item.note}</p></button>)}</div>}{identificationMode === "request" && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-xs leading-5 text-amber-800">동정 요청으로 올리면 피드에 “동정 요청” 상태가 표시됩니다. 다른 사용자가 댓글로 후보 종을 제안할 수 있습니다.</p>}</div><div className="grid gap-3 md:grid-cols-2"><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm"><option value="fish">물고기</option><option value="crab">갑각류</option><option value="shell">패류·두족류</option></select><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="공개 지역명 예: 부산 기장군 대라리" className="rounded-xl border-slate-200 bg-slate-50" /></div><div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="flex flex-col gap-3 md:flex-row md:items-center"><Button onClick={getCurrentLocation} variant="outline" className="rounded-xl bg-white"><Navigation className="mr-1 h-4 w-4" />현재 위치 저장</Button><Input value={locationInfo.latitude ?? ""} onChange={(e) => updateLatitude(e.target.value)} placeholder="위도 예: 35.076123" className="rounded-xl border-slate-200 bg-white" /><Input value={locationInfo.longitude ?? ""} onChange={(e) => updateLongitude(e.target.value)} placeholder="경도 예: 129.064321" className="rounded-xl border-slate-200 bg-white" /><Button onClick={clearLocation} variant="outline" className="rounded-xl bg-white">좌표 초기화</Button></div><p className="mt-3 text-xs leading-5 text-slate-500">{locationMessage}</p><div className="mt-3"><CoordinateMap latitude={locationInfo.latitude} longitude={locationInfo.longitude} /></div>{locationInfo.latitude && locationInfo.longitude && <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-700">좌표 저장 준비 완료: {locationInfo.latitude.toFixed(6)}, {locationInfo.longitude.toFixed(6)} · 공개 화면에는 이 좌표가 표시되지 않습니다.</div>}</div><Input value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} placeholder={identificationMode === "request" ? "특징 설명 예: 몸통에 세로줄, 바위틈에서 발견" : "간단한 설명"} className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleUpload} disabled={uploading} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700 disabled:opacity-60"><Plus className="mr-2 h-5 w-5" />{uploading ? "업로드 중..." : identificationMode === "request" ? "동정 요청 올리기" : "기록 올리기"}</Button>{uploadMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{uploadMessage}</p>}</div></section>}
 
-        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-4"><div className="grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-3xl">🐟</div><div><p className="text-lg font-black">{currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
+        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-4"><div className="grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-3xl">🐟</div><div><p className="text-lg font-black">{currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">내 배지</h3>{myBadges.length === 0 ? <p className="mt-2 text-sm leading-6 text-slate-600">첫 기록을 올리면 배지가 표시됩니다.</p> : <div className="mt-3 flex flex-wrap gap-2">{myBadges.map((badge) => <span key={badge} className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{badge}</span>)}</div>}<p className="mt-3 text-xs leading-5 text-slate-500">배지는 포획량보다 기록 다양성, 위치 기록, 동정 참여를 중심으로 확장할 예정입니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
 
         {tab === "rank" && <section><SectionTitle title="월간 Ho-cha 랭킹" desc="종 다양성, 정확한 기록, 방류 인증을 중심으로 점수를 부여합니다." /><div className="grid gap-4 md:grid-cols-2">{rankings.map((item) => <Card key={item.rank} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-600">{item.rank}</div><div><p className="font-black">{item.avatar} {item.name}</p><p className="text-sm text-slate-500">기록 {item.score}</p></div></div><p className="text-lg font-black text-blue-600">{item.points} pt</p></CardContent></Card>)}</div></section>}
-        {tab === "book" && <section><SectionTitle title="연안 도감" desc="기록된 생물은 도감에 자동 누적되며, 계절·지역·해황 정보와 연결됩니다." /><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{speciesBook.map((item) => { const Icon = item.icon; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Icon className="h-6 w-6" /></div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건</p><p className="mt-4 text-sm text-slate-600"><CalendarDays className="mr-1 inline h-4 w-4" /> {item.season}</p><p className="mt-2 text-sm text-slate-600"><Compass className="mr-1 inline h-4 w-4" /> {item.point}</p></CardContent></Card>; })}</div></section>}
+        {tab === "book" && <section><SectionTitle title="연안 도감" desc="실제 업로드 기록을 기준으로 자동 집계합니다. 표준종 연결 기록과 동정 요청 기록을 구분합니다." />{dogamItems.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><BookOpen className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 실제 도감 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 도감이 자동으로 채워집니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">기록 올리기</Button></div> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{dogamItems.map((item) => { const meta = item.meta; const statusLabel = meta ? "표준종 연결" : item.requestCount > 0 ? "동정 요청 포함" : "미확인"; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600">{meta?.category === "shell" ? <Shell className="h-6 w-6" /> : <Fish className="h-6 w-6" />}</div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건 · 지역 {item.locations.size}곳</p><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{meta?.group || "사용자 입력"}</span><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{statusLabel}</span>{meta && <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {meta.rarity}</span>}</div>{meta && <p className="mt-3 text-xs italic text-slate-500">{meta.scientificName}</p>}<p className="mt-2 text-sm leading-6 text-slate-600">{meta?.note || "표준종 후보와 연결되지 않은 기록입니다. 이후 동정 검토 기능으로 정리할 수 있습니다."}</p></CardContent></Card>; })}</div>}</section>}
         {tab === "weather" && <section className="grid gap-6 md:grid-cols-[1fr_420px] md:items-start"><div><SectionTitle title="지역별 해황" desc="현재는 데모 화면입니다. 이후 공공 해양 API와 연결합니다." /><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="grid h-96 place-items-center rounded-2xl bg-gradient-to-br from-blue-50 to-slate-100 text-center"><div><Map className="mx-auto mb-3 h-14 w-14 text-blue-500" /><p className="font-black">무료 GPS 기반 위치 저장</p><p className="mt-2 text-sm text-slate-500">지도 API 없이도 위도·경도 저장은 가능합니다.</p></div></div></CardContent></Card></div><WeatherCard /></section>}
-        {tab === "data" && <section><SectionTitle title="출현 모니터링" desc="시민 기록을 기반으로 계절·지역·수온별 연안 생물 출현 흐름을 확인합니다." /><div className="grid gap-5 md:grid-cols-2"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">수집 데이터</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 사진 기록, 생물명, 기록일</li><li>• 공개용 권역 위치</li><li>• 비공개 좌표 기반 출현 위치</li><li>• 추후 수온, 염분, 풍속, 파고 연결</li></ul></CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">운영 원칙</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 정확한 포인트는 공개하지 않음</li><li>• 금어기·금지체장·보호종 기록 검토</li><li>• 포획량보다 기록 정확도 중심 랭킹</li><li>• 장기적으로 연구·교육 자료화</li></ul></CardContent></Card></div></section>}
+        {tab === "data" && <section><SectionTitle title="출현 모니터링" desc="시민 기록을 기반으로 계절·지역·수온별 연안 생물 출현 흐름을 확인합니다." /><div className="grid gap-5 md:grid-cols-2"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">수집 데이터</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 사진 기록, 생물명, 기록일</li><li>• 공개용 권역 위치</li><li>• 비공개 좌표 기반 출현 위치</li><li>• 추후 수온, 염분, 풍속, 파고 연결</li></ul></CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">운영 원칙</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 정확한 포인트는 공개하지 않음</li><li>• 금어기·금지체장·보호종 기록 검토</li><li>• 포획량보다 기록 정확도 중심 랭킹</li><li>• 장기적으로 연구·교육 자료화</li><li>• 동정 요청 기록은 검토 대상으로 분류</li><li>• 표준종 연결 기록은 도감·지도 데이터 품질 향상에 활용</li></ul></CardContent></Card></div></section>}
       </main>}
 
       {authOpen && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-900/60 px-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><h2 className="text-2xl font-black text-slate-900">{authMode === "login" ? "로그인" : "회원가입"}</h2><p className="mt-2 text-sm leading-6 text-slate-500">Ho-cha 기록을 올리고 댓글을 남기려면 계정이 필요합니다.</p></div><button onClick={() => setAuthOpen(false)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="grid gap-3">{authMode === "signup" && <Input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="닉네임" className="rounded-xl border-slate-200 bg-slate-50" />}<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" className="rounded-xl border-slate-200 bg-slate-50" /><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 6자 이상" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleAuth} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700">{authMode === "login" ? "로그인하기" : "회원가입하기"}</Button>{authMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{authMessage}</p>}<button onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthMessage(""); }} className="text-sm font-bold text-blue-600">{authMode === "login" ? "처음 오셨나요? 회원가입" : "이미 계정이 있나요? 로그인"}</button></div></div></div>}
