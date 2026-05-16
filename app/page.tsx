@@ -1,571 +1,301 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import {
-  BookOpen,
-  CalendarDays,
-  Camera,
-  ChevronRight,
-  Compass,
-  Droplets,
-  Eye,
-  Fish,
-  Flag,
-  Heart,
-  Info,
-  Leaf,
-  LogIn,
-  Map,
-  MapPin,
-  Menu,
-  MessageCircle,
-  Navigation,
-  Plus,
-  Search,
-  Shell,
-  Thermometer,
-  Trophy,
-  Trash2,
-  Upload,
-  User,
-  UserPlus,
-  Waves,
-  Wind,
-  X,
-} from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Camera, Heart, MessageCircle, Trash2, MapPin, BookOpen, Map as MapIcon, Trophy, Upload, Navigation, LogOut, UserPlus, LogIn, X, Search } from "lucide-react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase";
-
-const samplePosts = [
-  { id: "sample-1", user_id: "sample", user: "바다소년", species: "쥐노래미", group: "fish", location: "부산 기장", temp: "18.6°C", wave: "0.4 m", caption: "오전에 족대로 잡았어요. 23cm 정도 됩니다.", likes: 24, comments: 5, img: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=900&q=80", tag: "물고기", date: "샘플", avatar: "🐟", isSample: true },
-  { id: "sample-2", user_id: "sample", user: "낚시놀거위", species: "갑오징어", group: "shell", location: "통영 선암읍", temp: "17.8°C", wave: "0.5 m", caption: "방파제 앞에서 잡았습니다. 사이즈 좋은 녀석!", likes: 31, comments: 7, img: "https://images.unsplash.com/photo-1564419320461-6870880221ad?auto=format&fit=crop&w=900&q=80", tag: "두족류", date: "샘플", avatar: "🦑", isSample: true },
-  { id: "sample-3", user_id: "sample", user: "제주바당", species: "돌돔", group: "fish", location: "제주 서귀포", temp: "20.1°C", wave: "0.6 m", caption: "뜰채로 확인하고 바로 기록했습니다.", likes: 18, comments: 3, img: "https://images.unsplash.com/photo-1517420879524-86d64ac2f339?auto=format&fit=crop&w=900&q=80", tag: "물고기", date: "샘플", avatar: "🌊", isSample: true },
-];
-
-const rankings = [
-  { rank: 1, name: "바다소년", score: "28종", points: 1280, avatar: "🐟" },
-  { rank: 2, name: "제주바당", score: "24종", points: 1120, avatar: "🌊" },
-  { rank: 3, name: "낚시놀거위", score: "21종", points: 980, avatar: "🦑" },
-  { rank: 4, name: "갯바위킹", score: "19종", points: 870, avatar: "🦀" },
-  { rank: 5, name: "행복한낚시", score: "17종", points: 820, avatar: "🐡" },
-];
-
-const speciesBook = [
-  { name: "쥐노래미", count: 42, season: "봄·가을", icon: Fish, point: "연안 암반·방파제 주변" },
-  { name: "꽃게", count: 31, season: "봄·여름", icon: Shell, point: "갯벌·연안 저층" },
-  { name: "고둥류", count: 57, season: "연중", icon: Shell, point: "조간대·항만 구조물" },
-  { name: "망둑어류", count: 24, season: "여름", icon: Fish, point: "하구·얕은 연안" },
-];
+import { Card, CardContent } from "@/components/ui/card";
 
 type Post = {
   id: string;
-  user_id?: string;
-  user: string;
-  species: string;
-  group: string;
-  location: string;
+  user_id: string | null;
+  species_name: string;
+  category?: string | null;
+  caption?: string | null;
+  image_url?: string | null;
+  region?: string | null;
   latitude?: number | null;
   longitude?: number | null;
-  temp?: string;
-  wave?: string;
-  caption: string;
-  likes: number;
-  comments: number;
-  img: string;
-  tag: string;
-  date: string;
-  avatar: string;
-  isSample?: boolean;
-  likedByMe?: boolean;
+  created_at?: string;
+  profiles?: { nickname?: string | null; avatar_url?: string | null } | null;
+  likes?: { user_id: string }[];
+  comments?: { id: string }[];
+  identification_status?: string | null;
+  rarity?: string | null;
 };
 
-type Comment = {
+type Profile = { id: string; nickname: string | null; avatar_url?: string | null };
+
+type Comment = { id: string; post_id: string; user_id: string | null; content: string; created_at: string; profiles?: { nickname?: string | null } | null };
+
+type SpeciesMaster = {
   id: string;
-  content: string;
-  created_at: string;
-  user_id?: string;
+  commonName: string;
+  scientificName: string;
+  category: string;
+  group: string;
+  aliases: string[];
+  rarity: "흔함" | "보통" | "드묾" | "주의";
 };
 
-type LocationState = {
-  latitude: number | null;
-  longitude: number | null;
-  accuracy: number | null;
+const speciesMaster: SpeciesMaster[] = [
+  { id: "sebastes-inermis", commonName: "볼락", scientificName: "Sebastes inermis", category: "물고기", group: "볼락류", aliases: ["볼락류", "볼락", "뽈락", "rockfish"], rarity: "보통" },
+  { id: "sebastes-schlegelii", commonName: "조피볼락", scientificName: "Sebastes schlegelii", category: "물고기", group: "볼락류", aliases: ["우럭", "조피볼락", "볼락류", "rockfish"], rarity: "흔함" },
+  { id: "pagrus-major", commonName: "참돔", scientificName: "Pagrus major", category: "물고기", group: "돔류", aliases: ["참돔", "도미", "돔류", "돔", "red seabream"], rarity: "보통" },
+  { id: "acantho-pagrus", commonName: "감성돔", scientificName: "Acanthopagrus schlegelii", category: "물고기", group: "돔류", aliases: ["감성돔", "감시", "돔류", "도미"], rarity: "보통" },
+  { id: "ophiu-hali", commonName: "쥐노래미", scientificName: "Hexagrammos otakii", category: "물고기", group: "노래미류", aliases: ["쥐노래미", "노래미", "노래미류"], rarity: "흔함" },
+  { id: "lateolabrax", commonName: "농어", scientificName: "Lateolabrax japonicus", category: "물고기", group: "농어류", aliases: ["농어", "깔따구", "농어류", "sea bass"], rarity: "보통" },
+  { id: "paralichthys", commonName: "넙치", scientificName: "Paralichthys olivaceus", category: "물고기", group: "가자미류", aliases: ["넙치", "광어", "가자미류", "flatfish"], rarity: "보통" },
+  { id: "konosirus", commonName: "전어", scientificName: "Konosirus punctatus", category: "물고기", group: "청어류", aliases: ["전어", "청어류"], rarity: "흔함" },
+  { id: "sillago", commonName: "보리멸", scientificName: "Sillago japonica", category: "물고기", group: "보리멸류", aliases: ["보리멸", "모래무지", "보리멸류"], rarity: "보통" },
+  { id: "mugil", commonName: "숭어", scientificName: "Mugil cephalus", category: "물고기", group: "숭어류", aliases: ["숭어", "가숭어", "숭어류"], rarity: "흔함" },
+  { id: "portumnus", commonName: "꽃게", scientificName: "Portunus trituberculatus", category: "갑각류", group: "게류", aliases: ["꽃게", "게", "게류", "갑각류"], rarity: "보통" },
+  { id: "octopus", commonName: "문어류", scientificName: "Octopoda", category: "두족류", group: "문어류", aliases: ["문어", "문어류", "두족류"], rarity: "보통" },
+  { id: "sepia", commonName: "갑오징어류", scientificName: "Sepiidae", category: "두족류", group: "오징어류", aliases: ["갑오징어", "오징어", "두족류"], rarity: "보통" },
+  { id: "haliotis", commonName: "전복류", scientificName: "Haliotis", category: "패류", group: "패류", aliases: ["전복", "전복류", "패류", "조개"], rarity: "주의" },
+];
+
+function rarityClass(rarity?: string | null) {
+  if (rarity === "흔함") return "bg-slate-100 text-slate-700";
+  if (rarity === "보통") return "bg-blue-50 text-blue-700";
+  if (rarity === "드묾") return "bg-purple-50 text-purple-700";
+  if (rarity === "주의") return "bg-amber-50 text-amber-700";
+  return "bg-slate-100 text-slate-600";
+}
+
+
+const samplePosts: Post[] = [
+  { id: "sample-1", user_id: null, species_name: "쥐노래미", category: "물고기", caption: "샘플 기록입니다. 로그인 후 실제 기록을 올릴 수 있습니다.", image_url: "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=900&q=80", region: "부산 기장군 대라리", latitude: 35.240, longitude: 129.226, created_at: new Date().toISOString(), profiles: { nickname: "Ho-cha 사용자" }, likes: [], comments: [] },
+  { id: "sample-2", user_id: null, species_name: "꽃게", category: "갑각류", caption: "정확한 좌표는 공개하지 않고 지역명만 표시됩니다.", image_url: "https://images.unsplash.com/photo-1559737558-2f5a35f4523b?auto=format&fit=crop&w=900&q=80", region: "전남 여수시 돌산읍", latitude: 34.708, longitude: 127.765, created_at: new Date().toISOString(), profiles: { nickname: "연안기록자" }, likes: [], comments: [] }
+];
+
+const fmt = (date?: string) => {
+  if (!date) return "방금 전";
+  return new Intl.DateTimeFormat("ko-KR", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }).format(new Date(date));
 };
 
-function formatDate(value?: string) {
-  if (!value) return "방금 전";
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "방금 전";
-  return d.toLocaleDateString("ko-KR", { month: "2-digit", day: "2-digit" }) + " " + d.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
-}
-
-
-function getOsmEmbedUrl(latitude: number | null, longitude: number | null) {
-  if (latitude === null || longitude === null) return "";
-  const delta = 0.01;
-  const left = longitude - delta;
-  const right = longitude + delta;
-  const top = latitude + delta;
-  const bottom = latitude - delta;
-  return `https://www.openstreetmap.org/export/embed.html?bbox=${left}%2C${bottom}%2C${right}%2C${top}&layer=mapnik&marker=${latitude}%2C${longitude}`;
-}
-
-function CoordinateMap({ latitude, longitude }: { latitude: number | null; longitude: number | null }) {
-  if (latitude === null || longitude === null) {
-    return (
-      <div className="grid h-72 place-items-center rounded-2xl border border-dashed border-slate-300 bg-white text-center">
-        <div>
-          <MapPin className="mx-auto mb-3 h-10 w-10 text-slate-400" />
-          <p className="font-black text-slate-700">지도 미리보기</p>
-          <p className="mt-1 text-sm text-slate-500">현재 위치 저장 또는 좌표 입력 후 지도가 표시됩니다.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-      <iframe
-        title="선택 위치 지도"
-        src={getOsmEmbedUrl(latitude, longitude)}
-        className="h-72 w-full border-0"
-        loading="lazy"
-      />
-      <div className="grid gap-2 border-t border-slate-100 p-3 text-xs text-slate-600 md:grid-cols-2">
-        <div className="rounded-xl bg-slate-50 p-2"><span className="font-bold">위도</span> {latitude.toFixed(6)}</div>
-        <div className="rounded-xl bg-slate-50 p-2"><span className="font-bold">경도</span> {longitude.toFixed(6)}</div>
-      </div>
-    </div>
-  );
-}
-
-function mapDbPost(row: any): Post {
-  const category = row.category || "fish";
-  return {
-    id: row.id,
-    user_id: row.user_id,
-    user: "Ho-cha 사용자",
-    species: row.species_name || "미동정 생물",
-    group: category,
-    location: row.region || "지역 미입력",
-    latitude: row.latitude,
-    longitude: row.longitude,
-    temp: row.water_temp || undefined,
-    wave: row.wave_height || undefined,
-    caption: row.caption || "새로운 Ho-cha 기록입니다.",
-    likes: row.likes_count ?? row.likes ?? 0,
-    comments: row.comments_count ?? row.comments ?? 0,
-    img: row.image_url || "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=80",
-    tag: category === "shell" ? "패류" : category === "crab" ? "갑각류" : "물고기",
-    date: formatDate(row.created_at),
-    avatar: category === "shell" ? "🐚" : category === "crab" ? "🦀" : "🐟",
-    likedByMe: row.liked_by_me ?? false,
-  };
-}
-
-function SectionTitle({ title, desc, action }: { title: string; desc?: string; action?: string }) {
-  return (
-    <div className="mb-5 flex items-end justify-between gap-3">
-      <div>
-        <h2 className="text-xl font-black text-slate-900 md:text-2xl">{title}</h2>
-        {desc && <p className="mt-1 text-sm text-slate-500">{desc}</p>}
-      </div>
-      {action && <button className="hidden items-center gap-1 text-sm font-bold text-blue-600 md:flex">{action} <ChevronRight className="h-4 w-4" /></button>}
-    </div>
-  );
-}
-
-function PostCard({
-  post,
-  compact = false,
-  currentUserId,
-  onComments,
-  onLike,
-  onDelete,
-}: {
-  post: Post;
-  compact?: boolean;
-  currentUserId?: string;
-  onComments: (post: Post) => void;
-  onLike: (post: Post) => void;
-  onDelete: (post: Post) => void;
-}) {
-  const canDelete = !post.isSample && Boolean(currentUserId) && post.user_id === currentUserId;
-
-  return (
-    <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
-      <div className="flex items-center gap-3 p-4">
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-lg">{post.avatar}</div>
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-bold text-slate-900">{post.user}</p>
-          <p className="truncate text-xs text-slate-500">{post.date}{post.location ? ` · ${post.location}` : ""}</p>
-        </div>
-        {canDelete && (
-          <button onClick={() => onDelete(post)} className="rounded-xl p-2 text-slate-400 hover:bg-red-50 hover:text-red-600" title="내 게시글 삭제">
-            <Trash2 className="h-4 w-4" />
-          </button>
-        )}
-      </div>
-      <img src={post.img} alt={post.species} className={`${compact ? "h-44" : "h-52"} w-full object-cover`} />
-      <div className="p-4">
-        <div className="mb-2 flex flex-wrap items-center gap-2">
-          <h3 className="font-black text-slate-900">{post.species}</h3>
-          <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{post.tag}</span>
-          {post.latitude && post.longitude && <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">위치 저장됨</span>}
-          {post.isSample && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-slate-500">샘플</span>}
-        </div>
-        <p className="line-clamp-2 text-sm leading-6 text-slate-600">{post.caption}</p>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-          {post.temp && <span className="rounded-full bg-slate-100 px-2 py-1">수온 {post.temp}</span>}
-          {post.wave && <span className="rounded-full bg-slate-100 px-2 py-1">파고 {post.wave}</span>}
-        </div>
-        <div className="mt-4 flex items-center gap-4 text-sm text-slate-500">
-          <button onClick={() => onLike(post)} className={`flex items-center gap-1 font-bold transition ${post.likedByMe ? "text-red-500" : "hover:text-red-500"}`}>
-            <Heart className={`h-4 w-4 ${post.likedByMe ? "fill-current" : ""}`} />{post.likes}
-          </button>
-          <button onClick={() => onComments(post)} className="flex items-center gap-1 hover:text-blue-600">
-            <MessageCircle className="h-4 w-4" />댓글 {post.comments}
-          </button>
-          <button className="ml-auto flex items-center gap-1 text-xs text-slate-400"><Flag className="h-3.5 w-3.5" />신고</button>
-        </div>
-      </div>
-    </motion.article>
-  );
-}
-
-function WeatherCard() {
-  return (
-    <Card className="rounded-3xl border-0 bg-slate-900/92 text-white shadow-2xl backdrop-blur">
-      <CardContent className="p-6">
-        <div className="mb-5 flex items-start justify-between">
-          <div><h3 className="text-2xl font-black">오늘의 해황</h3><p className="mt-3 flex items-center gap-1 text-sm text-slate-200"><MapPin className="h-4 w-4" /> 부산 기장군 연안</p></div>
-          <p className="text-xs text-slate-300">데모 기준</p>
-        </div>
-        <div className="grid grid-cols-2 gap-3 rounded-2xl border border-white/10 p-3">
-          <div className="border-b border-r border-white/10 p-3"><p className="mb-2 text-xs text-slate-300">수온</p><p className="flex items-center gap-2 text-2xl font-black"><Thermometer className="h-6 w-6" />18.6°C</p></div>
-          <div className="border-b border-white/10 p-3"><p className="mb-2 text-xs text-slate-300">파고</p><p className="flex items-center gap-2 text-2xl font-black"><Waves className="h-6 w-6" />0.4m</p></div>
-          <div className="border-r border-white/10 p-3"><p className="mb-2 text-xs text-slate-300">풍속</p><p className="flex items-center gap-2 text-2xl font-black"><Wind className="h-6 w-6" />3.2m/s</p></div>
-          <div className="p-3"><p className="mb-2 text-xs text-slate-300">염분</p><p className="flex items-center gap-2 text-2xl font-black"><Droplets className="h-6 w-6" />33.8psu</p></div>
-        </div>
-        <Button className="mt-4 w-full rounded-xl bg-white/10 py-5 font-bold text-white hover:bg-white/15">자세히 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button>
-      </CardContent>
-    </Card>
-  );
-}
-
-export default function HoChaWebMVP() {
-  const [tab, setTab] = useState("home");
-  const [query, setQuery] = useState("");
-  const [mobileMenu, setMobileMenu] = useState(false);
+export default function Home() {
+  const [tab, setTab] = useState("feed");
+  const [sessionUser, setSessionUser] = useState<any>(null);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [posts, setPosts] = useState<Post[]>(samplePosts);
-  const [dbPostsLoaded, setDbPostsLoaded] = useState(false);
-  const [form, setForm] = useState({ species: "", location: "", caption: "", category: "fish" });
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [uploading, setUploading] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState("");
-  const [locationInfo, setLocationInfo] = useState<LocationState>({ latitude: null, longitude: null, accuracy: null });
-  const [locationMessage, setLocationMessage] = useState("정확 좌표는 DB에만 저장하고, 피드에는 입력한 권역명만 표시합니다.");
-  const [authOpen, setAuthOpen] = useState(false);
-  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [nickname, setNickname] = useState("");
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [authMessage, setAuthMessage] = useState("");
-  const [commentPost, setCommentPost] = useState<Post | null>(null);
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<Record<string, Comment[]>>({});
+  const [openComments, setOpenComments] = useState<string | null>(null);
   const [commentText, setCommentText] = useState("");
-
-  const currentUserPosts = useMemo(() => posts.filter((post) => !post.isSample && post.user_id === currentUser?.id), [posts, currentUser]);
-  const mySpeciesCount = useMemo(() => new Set(currentUserPosts.map((post) => post.species.trim()).filter(Boolean)).size, [currentUserPosts]);
-  const filteredPosts = useMemo(() => posts.filter((post) => `${post.species} ${post.location} ${post.caption} ${post.user}`.toLowerCase().includes(query.toLowerCase())), [query, posts]);
-
-  const fetchPosts = async () => {
-    if (!supabase) return;
-    const { data, error } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
-    if (!error && data) {
-      const postIds = data.map((row: any) => row.id);
-      const [commentsResult, likesResult] = await Promise.all([
-        postIds.length ? supabase.from("comments").select("post_id").in("post_id", postIds) : Promise.resolve({ data: [] as any[] }),
-        postIds.length ? supabase.from("likes").select("post_id,user_id").in("post_id", postIds) : Promise.resolve({ data: [] as any[] }),
-      ]);
-
-      const commentCounts: Record<string, number> = {};
-      (commentsResult.data || []).forEach((item: any) => {
-        commentCounts[item.post_id] = (commentCounts[item.post_id] || 0) + 1;
-      });
-
-      const likeCounts: Record<string, number> = {};
-      const likedByMe = new Set<string>();
-      (likesResult.data || []).forEach((item: any) => {
-        likeCounts[item.post_id] = (likeCounts[item.post_id] || 0) + 1;
-        if (currentUser?.id && item.user_id === currentUser.id) likedByMe.add(item.post_id);
-      });
-
-      const mapped = data.map((row: any) => mapDbPost({
-        ...row,
-        likes_count: likeCounts[row.id] || 0,
-        comments_count: commentCounts[row.id] || 0,
-        liked_by_me: likedByMe.has(row.id),
-      }));
-      setPosts(mapped.length > 0 ? mapped : samplePosts);
-      setDbPostsLoaded(true);
-    }
-  };
+  const [query, setQuery] = useState("");
+  const [authMode, setAuthMode] = useState<"login" | "signup" | null>(null);
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [nickname, setNickname] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState("");
+  const [form, setForm] = useState({ species: "", category: "물고기", region: "", caption: "", latitude: "", longitude: "" });
+  const [speciesQuery, setSpeciesQuery] = useState("");
+  const [selectedSpecies, setSelectedSpecies] = useState<SpeciesMaster | null>(null);
+  const [identificationMode, setIdentificationMode] = useState<"standard" | "request">("standard");
+  const fileRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
-    supabase.auth.getUser().then(({ data }) => setCurrentUser(data.user));
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => setCurrentUser(session?.user ?? null));
+    supabase.auth.getUser().then(({ data }) => {
+      setSessionUser(data.user);
+      if (data.user) loadProfile(data.user.id);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSessionUser(session?.user ?? null);
+      if (session?.user) loadProfile(session.user.id); else setProfile(null);
+    });
     fetchPosts();
     return () => listener.subscription.unsubscribe();
   }, []);
 
-  useEffect(() => {
-    if (supabase) fetchPosts();
-  }, [currentUser?.id]);
+  async function loadProfile(userId: string) {
+    if (!supabase) return;
+    const { data } = await supabase.from("profiles").select("*").eq("id", userId).maybeSingle();
+    setProfile(data as Profile | null);
+  }
 
-  useEffect(() => {
-    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
-  }, [previewUrl]);
+  async function fetchPosts() {
+    if (!supabase) return;
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*, profiles(nickname, avatar_url), likes(user_id), comments(id)")
+      .order("created_at", { ascending: false });
+    if (!error && data) setPosts(data as Post[]);
+  }
 
-  const openAuth = (mode: "login" | "signup") => { setAuthMode(mode); setAuthMessage(""); setAuthOpen(true); };
-
-  const handleAuth = async () => {
-    if (!isSupabaseConfigured || !supabase) { setAuthMessage("Supabase 환경변수가 연결되지 않았습니다."); return; }
-    if (!email || !password) { setAuthMessage("이메일과 비밀번호를 입력해주세요."); return; }
-    if (password.length < 6) { setAuthMessage("비밀번호는 6자 이상이어야 합니다."); return; }
-    setAuthMessage("처리 중입니다...");
-    if (authMode === "signup") {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) { setAuthMessage(error.message); return; }
-      const userId = data.user?.id;
-      if (userId) await supabase.from("profiles").upsert({ id: userId, nickname: nickname || email.split("@")[0] });
-      setAuthMessage("회원가입이 완료되었습니다. 이메일 확인이 필요한 경우 메일함을 확인해주세요.");
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) { setAuthMessage(error.message); return; }
-      setAuthMessage("로그인되었습니다.");
-      setAuthOpen(false);
+  async function signUp() {
+    if (!supabase) return alert("Supabase 환경변수를 확인해주세요.");
+    const { data, error } = await supabase.auth.signUp({ email: authEmail, password: authPassword });
+    if (error) return alert(error.message);
+    if (data.user) {
+      await supabase.from("profiles").upsert({ id: data.user.id, nickname: nickname || "Ho-cha 사용자" });
+      alert("회원가입 완료. 로그인 상태를 확인해주세요.");
+      setAuthMode(null);
     }
-  };
+  }
 
-  const handleLogout = async () => { if (!supabase) return; await supabase.auth.signOut(); setCurrentUser(null); setTab("home"); };
+  async function signIn() {
+    if (!supabase) return;
+    const { error } = await supabase.auth.signInWithPassword({ email: authEmail, password: authPassword });
+    if (error) return alert(error.message);
+    setAuthMode(null);
+  }
 
-  const handleFileChange = (file?: File) => {
+  async function signOut() { if (supabase) await supabase.auth.signOut(); }
+
+  function chooseFile(file?: File) {
     if (!file) return;
-    if (!file.type.startsWith("image/")) { setUploadMessage("이미지 파일만 업로드할 수 있습니다."); return; }
-    if (file.size > 8 * 1024 * 1024) { setUploadMessage("사진은 8MB 이하로 올려주세요."); return; }
     setSelectedFile(file);
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(URL.createObjectURL(file));
-    setUploadMessage("");
-  };
+    setPreview(URL.createObjectURL(file));
+  }
 
-  const reverseGeocodeRegion = async (latitude: number, longitude: number) => {
-    try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=ko`);
-      if (!response.ok) return "";
-      const data = await response.json();
-      const address = data?.address || {};
-      const province = address.state || address.province || "";
-      const city = address.city || address.county || address.town || address.municipality || "";
-      const district = address.city_district || address.borough || address.suburb || "";
-      const neighborhood = address.neighbourhood || address.quarter || address.village || address.hamlet || "";
-      const parts = [province, city, district, neighborhood].filter(Boolean);
-      return Array.from(new Set(parts)).join(" ");
-    } catch {
-      return "";
-    }
-  };
-
-  const getCurrentLocation = () => {
-    if (!navigator.geolocation) {
-      setLocationMessage("이 브라우저는 위치 기능을 지원하지 않습니다. 지역명을 직접 입력해주세요.");
-      return;
-    }
-    setLocationMessage("현재 위치를 확인하는 중입니다...");
+  function getLocation() {
+    if (!navigator.geolocation) return alert("이 브라우저에서는 위치 기능을 지원하지 않습니다.");
     navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude, accuracy } = position.coords;
-        setLocationInfo({ latitude, longitude, accuracy });
-        setLocationMessage(`위치 저장 준비 완료 · 정확도 약 ${Math.round(accuracy)}m. 공개 지역명을 확인하는 중입니다...`);
-        if (!form.location.trim()) {
-          const regionName = await reverseGeocodeRegion(latitude, longitude);
-          setForm((prev) => ({ ...prev, location: regionName || "현재 위치 기반 기록" }));
-          setLocationMessage(regionName ? `공개 지역명을 자동 입력했습니다: ${regionName}. 필요하면 더 대략적으로 수정해주세요.` : `위치 좌표는 저장됩니다. 공개 지역명은 직접 입력해주세요.`);
-        } else {
-          setLocationMessage(`위치 저장 준비 완료 · 정확도 약 ${Math.round(accuracy)}m. 공개 화면에는 입력한 지역명만 표시됩니다.`);
-        }
-      },
-      () => setLocationMessage("위치 권한이 거부되었습니다. 지역명을 직접 입력해도 기록할 수 있습니다."),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+      (pos) => setForm((f) => ({ ...f, latitude: String(pos.coords.latitude), longitude: String(pos.coords.longitude), region: f.region || "현재 위치 기반 기록" })),
+      () => alert("위치 권한이 거부되었거나 위치를 가져올 수 없습니다."),
+      { enableHighAccuracy: true, timeout: 10000 }
     );
-  };
+  }
 
-  const updateLatitude = (value: string) => {
-    const latitude = Number(value);
-    setLocationInfo((prev) => ({ ...prev, latitude: Number.isFinite(latitude) ? latitude : null }));
-  };
-
-  const updateLongitude = (value: string) => {
-    const longitude = Number(value);
-    setLocationInfo((prev) => ({ ...prev, longitude: Number.isFinite(longitude) ? longitude : null }));
-  };
-
-  const clearLocation = () => {
-    setLocationInfo({ latitude: null, longitude: null, accuracy: null });
-    setLocationMessage("좌표를 초기화했습니다. 공개 지역명만으로도 기록할 수 있습니다.");
-  };
-
-  const handleUpload = async () => {
-    if (!supabase) { setUploadMessage("Supabase 연결이 필요합니다."); return; }
-    if (!currentUser) { setUploadMessage("로그인 후 기록을 올릴 수 있습니다."); openAuth("login"); return; }
-    if (!selectedFile) { setUploadMessage("사진을 선택해주세요."); return; }
-    if (!form.species.trim() || !form.location.trim()) { setUploadMessage("생물명과 공개 지역명은 필수입니다."); return; }
-
+  async function uploadPost() {
+    if (!supabase || !sessionUser) return alert("로그인이 필요합니다.");
+    if (!form.species.trim() && !speciesQuery.trim()) return alert("생물명을 입력하거나 동정 요청으로 저장해주세요.");
+    if (!form.region.trim()) return alert("공개 지역명을 입력해주세요.");
+    if (!selectedFile) return alert("사진을 선택해주세요.");
     setUploading(true);
-    setUploadMessage("업로드 중입니다...");
     try {
       const ext = selectedFile.name.split(".").pop() || "jpg";
-      const filePath = `${currentUser.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from("post-images").upload(filePath, selectedFile, { cacheControl: "3600", upsert: false });
+      const path = `${sessionUser.id}/${Date.now()}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from("post-images").upload(path, selectedFile, { upsert: false });
       if (uploadError) throw uploadError;
-
-      const { data: imageData } = supabase.storage.from("post-images").getPublicUrl(filePath);
-      const { error: insertError } = await supabase.from("posts").insert({
-        user_id: currentUser.id,
-        species_name: form.species.trim(),
+      const { data: publicUrl } = supabase.storage.from("post-images").getPublicUrl(path);
+      const { error } = await supabase.from("posts").insert({
+        user_id: sessionUser.id,
+        species_name: identificationMode === "standard" ? form.species.trim() : `동정 요청: ${speciesQuery.trim() || form.species.trim() || "미동정 생물"}`,
         category: form.category,
-        caption: form.caption.trim(),
-        image_url: imageData.publicUrl,
-        region: form.location.trim(),
-        latitude: locationInfo.latitude,
-        longitude: locationInfo.longitude,
+        caption: identificationMode === "request" ? `[동정 요청] ${form.caption.trim()}`.trim() : form.caption.trim(),
+        image_url: publicUrl.publicUrl,
+        region: form.region.trim(),
+        latitude: form.latitude ? Number(form.latitude) : null,
+        longitude: form.longitude ? Number(form.longitude) : null
       });
-      if (insertError) throw insertError;
+      if (error) throw error;
+      setForm({ species: "", category: "물고기", region: "", caption: "", latitude: "", longitude: "" });
+      setSpeciesQuery(""); setSelectedSpecies(null); setIdentificationMode("standard");
+      setSelectedFile(null); setPreview(""); setTab("feed"); await fetchPosts();
+    } catch (e: any) { alert(e.message || "업로드 실패"); } finally { setUploading(false); }
+  }
 
-      setForm({ species: "", location: "", caption: "", category: "fish" });
-      setLocationInfo({ latitude: null, longitude: null, accuracy: null });
-      setLocationMessage("정확 좌표는 DB에만 저장하고, 피드에는 입력한 권역명만 표시합니다.");
-      setSelectedFile(null);
-      setPreviewUrl("");
-      setUploadMessage("업로드 완료! 피드에 반영되었습니다.");
-      await fetchPosts();
-      setTab("feed");
-    } catch (err: any) {
-      setUploadMessage(err?.message || "업로드에 실패했습니다. Storage 정책을 확인해주세요.");
-    } finally {
-      setUploading(false);
-    }
-  };
+  async function toggleLike(post: Post) {
+    if (!supabase || !sessionUser) return alert("로그인이 필요합니다.");
+    const liked = post.likes?.some((l) => l.user_id === sessionUser.id);
+    if (liked) await supabase.from("likes").delete().eq("post_id", post.id).eq("user_id", sessionUser.id);
+    else await supabase.from("likes").insert({ post_id: post.id, user_id: sessionUser.id });
+    fetchPosts();
+  }
 
-  const toggleLike = async (post: Post) => {
-    if (post.isSample) {
-      setPosts((prev) => prev.map((item) => item.id === post.id ? { ...item, likedByMe: !item.likedByMe, likes: item.likedByMe ? Math.max(0, item.likes - 1) : item.likes + 1 } : item));
-      return;
-    }
+  async function loadComments(postId: string) {
     if (!supabase) return;
-    if (!currentUser) { openAuth("login"); return; }
+    const { data } = await supabase.from("comments").select("*, profiles(nickname)").eq("post_id", postId).order("created_at", { ascending: true });
+    setComments((c) => ({ ...c, [postId]: (data || []) as Comment[] }));
+    setOpenComments(openComments === postId ? null : postId);
+  }
 
-    const optimisticLiked = !post.likedByMe;
-    setPosts((prev) => prev.map((item) => item.id === post.id ? { ...item, likedByMe: optimisticLiked, likes: optimisticLiked ? item.likes + 1 : Math.max(0, item.likes - 1) } : item));
-
-    if (post.likedByMe) {
-      const { error } = await supabase.from("likes").delete().eq("post_id", post.id).eq("user_id", currentUser.id);
-      if (error) await fetchPosts();
-    } else {
-      const { error } = await supabase.from("likes").insert({ post_id: post.id, user_id: currentUser.id });
-      if (error) await fetchPosts();
-    }
-  };
-
-  const deletePost = async (post: Post) => {
-    if (!supabase || post.isSample) return;
-    if (!currentUser || post.user_id !== currentUser.id) return;
-    const ok = window.confirm("이 게시글을 삭제할까요? 삭제 후 되돌릴 수 없습니다.");
-    if (!ok) return;
-    const { error } = await supabase.from("posts").delete().eq("id", post.id).eq("user_id", currentUser.id);
-    if (error) {
-      alert(error.message || "삭제에 실패했습니다.");
-      return;
-    }
-    setPosts((prev) => prev.filter((item) => item.id !== post.id));
-    if (commentPost?.id === post.id) setCommentPost(null);
-  };
-
-  const openComments = async (post: Post) => {
-    setCommentPost(post);
-    setComments([]);
-    setCommentText("");
-    if (!supabase || post.isSample) return;
-    const { data } = await supabase.from("comments").select("*").eq("post_id", post.id).order("created_at", { ascending: true });
-    if (data) setComments(data);
-  };
-
-  const addComment = async () => {
-    if (!supabase || !commentPost || commentPost.isSample) return;
-    if (!currentUser) { openAuth("login"); return; }
+  async function addComment(postId: string) {
+    if (!supabase || !sessionUser) return alert("로그인이 필요합니다.");
     if (!commentText.trim()) return;
-    const { error } = await supabase.from("comments").insert({ post_id: commentPost.id, user_id: currentUser.id, content: commentText.trim() });
-    if (!error) {
-      setCommentText("");
-      setPosts((prev) => prev.map((item) => item.id === commentPost.id ? { ...item, comments: item.comments + 1 } : item));
-      setCommentPost((prev) => prev ? { ...prev, comments: prev.comments + 1 } : prev);
-      await openComments({ ...commentPost, comments: commentPost.comments + 1 });
-    }
-  };
+    const { error } = await supabase.from("comments").insert({ post_id: postId, user_id: sessionUser.id, content: commentText.trim() });
+    if (error) return alert(error.message);
+    setCommentText(""); await loadComments(postId); await fetchPosts();
+  }
 
-  const AuthButtons = () => currentUser ? (
-    <div className="flex items-center gap-2">
-      <Button onClick={() => setTab("profile")} variant="outline" className="rounded-xl border-blue-100 bg-blue-50 font-bold text-blue-700"><User className="mr-1 h-4 w-4" />내 프로필</Button>
-      <Button onClick={handleLogout} variant="outline" className="rounded-xl border-slate-200 bg-slate-50 font-bold">로그아웃</Button>
-    </div>
-  ) : (
-    <div className="flex items-center gap-2"><Button onClick={() => openAuth("login")} variant="outline" className="rounded-xl border-slate-200 bg-slate-50 font-bold"><LogIn className="mr-1 h-4 w-4" />로그인</Button><Button onClick={() => openAuth("signup")} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700"><UserPlus className="mr-1 h-4 w-4" />회원가입</Button></div>
-  );
+  async function deletePost(post: Post) {
+    if (!supabase || !sessionUser || post.user_id !== sessionUser.id) return;
+    if (!confirm("게시글을 삭제할까요?")) return;
+    const { error } = await supabase.from("posts").delete().eq("id", post.id);
+    if (error) return alert(error.message);
+    await fetchPosts();
+  }
 
-  const navItems = [["home", "홈"], ["feed", "피드"], ["upload", "기록 올리기"], ["book", "도감"], ["rank", "랭킹"], ["weather", "해황"], ["profile", "내 프로필"]];
+  const filteredPosts = useMemo(() => posts.filter(p => `${p.species_name} ${p.region} ${p.caption || ""}`.toLowerCase().includes(query.toLowerCase())), [posts, query]);
+  const myPosts = useMemo(() => posts.filter(p => p.user_id === sessionUser?.id), [posts, sessionUser]);
+  const dogam = useMemo(() => {
+    const map = new globalThis.Map<string, { name: string; count: number; regions: Set<string>; latest?: string; image?: string }>();
+    posts.filter(p => !p.id.startsWith("sample")).forEach(p => {
+      const key = p.species_name.trim(); if (!key) return;
+      const item = map.get(key) || { name: key, count: 0, regions: new Set<string>(), latest: p.created_at, image: p.image_url || undefined };
+      item.count += 1; if (p.region) item.regions.add(p.region); if (!item.latest || (p.created_at && p.created_at > item.latest)) item.latest = p.created_at; if (!item.image && p.image_url) item.image = p.image_url;
+      map.set(key, item);
+    });
+    return Array.from(map.values()).sort((a,b)=>b.count-a.count);
+  }, [posts]);
+  const mapPosts = posts.filter(p => p.latitude && p.longitude);
+  const mapCenter = mapPosts[0] || { latitude: 35.1796, longitude: 129.0756 } as any;
+  const mapSrc = `https://www.openstreetmap.org/export/embed.html?bbox=${Number(mapCenter.longitude)-0.05}%2C${Number(mapCenter.latitude)-0.05}%2C${Number(mapCenter.longitude)+0.05}%2C${Number(mapCenter.latitude)+0.05}&layer=mapnik&marker=${mapCenter.latitude}%2C${mapCenter.longitude}`;
+  const speciesCandidates = useMemo(() => {
+    const q = speciesQuery.trim().toLowerCase();
+    if (!q) return speciesMaster.slice(0, 6);
+    return speciesMaster.filter(s => [s.commonName, s.scientificName, s.group, ...s.aliases].some(v => v.toLowerCase().includes(q))).slice(0, 8);
+  }, [speciesQuery]);
 
-  return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
-          <button onClick={() => setTab("home")} className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-2xl">🐟</div><div className="text-left"><p className="text-3xl font-black leading-none tracking-tight text-slate-900">Ho-cha</p><p className="mt-1 text-xs font-bold text-slate-500">연안의 모든 기록, 우리의 바다</p></div></button>
-          <nav className="hidden items-center gap-6 md:flex">{navItems.map(([key, label]) => <button key={key} onClick={() => setTab(key)} className={`border-b-2 py-2 text-sm font-black transition ${tab === key ? "border-blue-600 text-blue-600" : "border-transparent text-slate-700 hover:text-blue-600"}`}>{label}</button>)}</nav>
-          <div className="hidden md:block"><AuthButtons /></div>
-          <button onClick={() => setMobileMenu(!mobileMenu)} className="rounded-xl p-2 text-slate-700 md:hidden">{mobileMenu ? <X /> : <Menu />}</button>
-        </div>
-        {mobileMenu && <div className="border-t border-slate-200 bg-white px-5 py-3 md:hidden"><div className="grid gap-1">{navItems.map(([key, label]) => <button key={key} onClick={() => { setTab(key); setMobileMenu(false); }} className={`rounded-xl px-3 py-3 text-left text-sm font-bold ${tab === key ? "bg-blue-50 text-blue-600" : "text-slate-700"}`}>{label}</button>)}<div className="mt-2"><AuthButtons /></div></div></div>}
-      </header>
+  return <div className="min-h-screen bg-slate-50 text-slate-900">
+    <header className="sticky top-0 z-40 border-b bg-white/95 backdrop-blur">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+        <button onClick={()=>setTab("feed")} className="flex items-center gap-3"><div className="grid h-10 w-10 place-items-center rounded-2xl bg-blue-50 text-xl">🐟</div><div className="text-left"><b className="text-2xl">Ho-cha</b><p className="text-xs text-slate-500">연안의 모든 기록, 우리의 바다</p></div></button>
+        <nav className="hidden gap-2 md:flex">
+          {[ ["feed","피드"],["upload","기록"],["dogam","도감"],["map","지도"],["profile","프로필"] ].map(([k,l])=><Button key={k} variant={tab===k?"default":"ghost"} size="sm" onClick={()=>setTab(k)}>{l}</Button>)}
+        </nav>
+        <div className="flex gap-2">{sessionUser ? <><span className="hidden text-sm font-bold md:block">{profile?.nickname || sessionUser.email}</span><Button variant="outline" size="sm" onClick={signOut}><LogOut className="mr-1 h-4 w-4"/>로그아웃</Button></> : <><Button variant="outline" size="sm" onClick={()=>setAuthMode("login")}><LogIn className="mr-1 h-4 w-4"/>로그인</Button><Button size="sm" onClick={()=>setAuthMode("signup")}><UserPlus className="mr-1 h-4 w-4"/>회원가입</Button></>}</div>
+      </div>
+      <div className="grid grid-cols-5 gap-1 border-t bg-white px-2 py-2 md:hidden">{[["feed","피드"],["upload","기록"],["dogam","도감"],["map","지도"],["profile","내정보"]].map(([k,l])=><button key={k} onClick={()=>setTab(k)} className={`rounded-xl py-2 text-xs font-bold ${tab===k?'bg-blue-50 text-blue-600':'text-slate-500'}`}>{l}</button>)}</div>
+    </header>
 
-      {tab === "home" && <>
-        <section className="relative overflow-hidden bg-slate-900"><div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=1800&q=80')] bg-cover bg-center opacity-60" /><div className="absolute inset-0 bg-gradient-to-r from-slate-950 via-slate-950/60 to-slate-950/20" /><div className="relative mx-auto grid max-w-7xl gap-8 px-5 py-14 md:grid-cols-[1.25fr_0.75fr] md:items-center md:py-24"><motion.div initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }}><h1 className="max-w-2xl text-5xl font-black leading-tight tracking-tight text-white md:text-7xl">연안의 모든 기록,<br />우리의 바다</h1><p className="mt-6 max-w-xl text-lg leading-8 text-slate-100">Ho-cha는 연안에서 만난 생물의 기록을 함께 나누는 공간입니다.</p><div className="mt-7 flex flex-wrap gap-3"><Button onClick={() => setTab("upload")} className="rounded-xl bg-blue-600 px-6 py-6 text-base font-black hover:bg-blue-700"><Camera className="mr-2 h-5 w-5" />기록 올리기</Button><Button onClick={() => setTab("feed")} variant="outline" className="rounded-xl border-white/30 bg-white/10 px-6 py-6 text-base font-black text-white hover:bg-white/20"><Eye className="mr-2 h-5 w-5" />둘러보기</Button></div><div className="mt-6 flex flex-wrap gap-2 text-sm text-white/90"><span className="rounded-full bg-white/15 px-3 py-1">사진 공유</span><span className="rounded-full bg-white/15 px-3 py-1">댓글 소통</span><span className="rounded-full bg-white/15 px-3 py-1">무료 GPS 기록</span><span className="rounded-full bg-white/15 px-3 py-1">도감 수집</span></div></motion.div><WeatherCard /></div></section>
-        <main className="mx-auto max-w-7xl px-5 py-8 md:py-10"><div className="grid gap-8 lg:grid-cols-[1fr_340px]"><div className="space-y-8"><section><SectionTitle title="오늘의 피드" desc={dbPostsLoaded && posts[0]?.isSample ? "아직 실제 기록이 없어 샘플을 보여줍니다." : "다른 사용자들이 올린 기록들입니다."} action="더보기" /><div className="grid gap-4 md:grid-cols-3">{posts.slice(0, 3).map((post) => <PostCard key={post.id} post={post} compact currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section><section className="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200"><SectionTitle title="최근 기록" desc="새로 올라온 기록이 이곳에 표시됩니다." action="더보기" /><div className="grid gap-4 md:grid-cols-3">{posts.slice(0, 3).map((post) => <PostCard key={`recent-${post.id}`} post={post} compact currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section></div><aside className="space-y-5"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><h3 className="mb-4 text-xl font-black">내 활동 요약</h3>{currentUser ? <><p className="text-sm text-slate-500">내가 올린 기록</p><p className="mt-2 text-4xl font-black text-blue-600">{currentUserPosts.length}<span className="text-xl">건</span></p><p className="mt-3 text-sm text-slate-500">기록 생물 {mySpeciesCount}종</p><Button onClick={() => setTab("profile")} variant="outline" className="mt-5 w-full rounded-xl bg-slate-50 font-bold">내 프로필 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button></> : <><p className="text-sm leading-6 text-slate-600">로그인하면 내 기록과 도감 현황을 따로 볼 수 있습니다.</p><Button onClick={() => openAuth("login")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">로그인</Button></>}</CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><h3 className="text-xl font-black">출현 모니터링</h3><div className="mt-4 grid h-44 place-items-center rounded-xl bg-gradient-to-br from-blue-50 to-slate-100 text-center"><div><Map className="mx-auto mb-2 h-10 w-10 text-blue-500" /><p className="text-sm font-bold text-slate-700">무료 GPS 좌표 저장</p><p className="mt-1 text-xs text-slate-500">공개 화면에는 권역만 표시</p></div></div><Button onClick={() => setTab("data")} variant="outline" className="mt-5 w-full rounded-xl bg-slate-50 font-bold">자세히 보기 <ChevronRight className="ml-1 h-4 w-4" /></Button></CardContent></Card></aside></div><section className="mt-10 rounded-3xl bg-blue-50 p-6 md:p-8"><div className="grid gap-6 md:grid-cols-5 md:items-start"><div><h3 className="text-2xl font-black">Ho-cha 란?</h3><p className="mt-3 text-sm leading-6 text-slate-700">연안에서 만난 다양한 생물들을 기록하고 공유하며 우리의 바다를 함께 지켜가는 커뮤니티입니다.</p></div>{[[Camera, "기록하고 공유하기", "사진과 함께 생물 기록을 남겨주세요."], [MapPin, "위치 저장", "무료 GPS로 좌표를 저장하고 공개는 권역만 표시합니다."], [BookOpen, "도감 채우기", "다양한 생물을 발견하고 나만의 도감을 완성하세요."], [Leaf, "바다를 지키기", "정확한 기록이 깨끗한 바다를 만드는 첫걸음입니다."]].map(([Icon, title, desc]: any) => <div key={title} className="text-center"><div className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-white text-blue-600 shadow-sm"><Icon className="h-6 w-6" /></div><p className="mt-3 font-black">{title}</p><p className="mt-2 text-sm leading-6 text-slate-600">{desc}</p></div>)}</div></section></main>
-      </>}
+    <main className="mx-auto max-w-6xl px-4 py-6">
+      {!isSupabaseConfigured && <div className="mb-4 rounded-xl bg-amber-50 p-4 text-sm text-amber-800">Supabase 환경변수가 없어 샘플 모드로 표시됩니다.</div>}
 
-      {tab !== "home" && <main className="mx-auto max-w-7xl px-5 py-8 md:py-10">
-        {tab === "feed" && <section><SectionTitle title="실시간 Ho-cha 피드" desc="실제 사용자가 올린 사진 기록이 표시됩니다." /><div className="mb-5 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm md:flex-row md:items-center"><div className="relative flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" /><Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="어종, 지역, 닉네임 검색" className="rounded-xl border-slate-200 bg-slate-50 pl-9" /></div><Button onClick={() => setTab("upload")} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700"><Plus className="mr-1 h-4 w-4" />기록 올리기</Button></div><div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filteredPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div></section>}
+      {tab === "feed" && <section><div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between"><div><h1 className="text-3xl font-black">실시간 피드</h1><p className="text-sm text-slate-500">시간 옆에는 공개 지역명만 표시됩니다.</p></div><div className="relative md:w-80"><Search className="absolute left-3 top-3 h-4 w-4 text-slate-400"/><Input className="pl-9" placeholder="생물명, 지역 검색" value={query} onChange={e=>setQuery(e.target.value)}/></div></div><div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filteredPosts.map(p => <PostCard key={p.id} post={p} userId={sessionUser?.id} onLike={()=>toggleLike(p)} onComments={()=>loadComments(p.id)} onDelete={()=>deletePost(p)} isOpen={openComments===p.id} comments={comments[p.id] || []} commentText={commentText} setCommentText={setCommentText} addComment={()=>addComment(p.id)}/>)}</div></section>}
 
-        {tab === "upload" && <section className="mx-auto max-w-3xl rounded-3xl border border-slate-200 bg-white p-6 shadow-sm md:p-8"><div className="mb-6 flex items-start gap-4 rounded-2xl bg-blue-50 p-4"><Info className="mt-0.5 h-5 w-5 flex-none text-blue-600" /><div><h2 className="text-2xl font-black">새 기록 올리기</h2><p className="mt-2 text-sm leading-6 text-slate-600">지도 API 비용 없이 브라우저 GPS와 직접 입력을 함께 사용합니다. 좌표는 데이터용으로 저장하고, 공개 피드에는 권역명만 표시합니다.</p></div></div><div className="grid gap-4"><label className="grid cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center hover:bg-blue-50"><input type="file" accept="image/*" className="hidden" onChange={(e) => handleFileChange(e.target.files?.[0])} />{previewUrl ? <img src={previewUrl} alt="preview" className="mb-4 max-h-72 w-full rounded-2xl object-cover" /> : <Camera className="mb-3 h-10 w-10 text-blue-500" />}<p className="font-black">{selectedFile ? selectedFile.name : "사진 업로드 영역"}</p><p className="mt-1 text-sm text-slate-500">이 영역을 누르면 카메라 또는 앨범에서 사진을 선택할 수 있습니다.</p></label><div className="grid gap-3 md:grid-cols-2"><Input value={form.species} onChange={(e) => setForm({ ...form, species: e.target.value })} placeholder="생물명 예: 쥐노래미, 꽃게" className="rounded-xl border-slate-200 bg-slate-50" /><select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm"><option value="fish">물고기</option><option value="shell">패류·두족류</option><option value="crab">갑각류</option></select></div><div className="rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3 flex items-start justify-between gap-3"><div><p className="text-sm font-black text-slate-800">위치 정보</p><p className="mt-1 text-xs leading-5 text-slate-500">무료 OpenStreetMap 미리보기와 좌표 저장을 함께 사용합니다. 정확 좌표는 DB에 저장하고, 피드에는 공개 지역명만 표시합니다. 현재 위치를 저장하면 가능한 경우 공개 지역명을 자동으로 입력합니다.</p></div><MapPin className="h-5 w-5 flex-none text-blue-500" /></div><div className="grid gap-2 md:grid-cols-[1fr_auto]"><Input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="공개 지역명 예: 부산 기장군 대라리, 부산광역시 연제구 연산9동" className="rounded-xl border-slate-200 bg-white" /><Button type="button" onClick={getCurrentLocation} variant="outline" className="rounded-xl bg-white"><Navigation className="mr-1 h-4 w-4" />현재 위치 저장</Button></div><div className="mt-3 grid gap-2 md:grid-cols-[1fr_1fr_auto]"><Input type="number" step="0.000001" value={locationInfo.latitude ?? ""} onChange={(e) => updateLatitude(e.target.value)} placeholder="위도 예: 35.076123" className="rounded-xl border-slate-200 bg-white" /><Input type="number" step="0.000001" value={locationInfo.longitude ?? ""} onChange={(e) => updateLongitude(e.target.value)} placeholder="경도 예: 129.064321" className="rounded-xl border-slate-200 bg-white" /><Button type="button" onClick={clearLocation} variant="outline" className="rounded-xl bg-white">좌표 초기화</Button></div><p className="mt-3 text-xs leading-5 text-slate-500">{locationMessage}</p><div className="mt-3"><CoordinateMap latitude={locationInfo.latitude} longitude={locationInfo.longitude} /></div>{locationInfo.latitude && locationInfo.longitude && <div className="mt-3 rounded-xl bg-emerald-50 p-3 text-xs leading-5 text-emerald-700">좌표 저장 준비 완료: {locationInfo.latitude.toFixed(6)}, {locationInfo.longitude.toFixed(6)} · 공개 화면에는 이 좌표가 표시되지 않습니다.</div>}</div><Input value={form.caption} onChange={(e) => setForm({ ...form, caption: e.target.value })} placeholder="간단한 설명" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleUpload} disabled={uploading} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700 disabled:opacity-60"><Plus className="mr-2 h-5 w-5" />{uploading ? "업로드 중..." : "기록 올리기"}</Button>{uploadMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{uploadMessage}</p>}</div></section>}
+      {tab === "upload" && <section className="mx-auto max-w-3xl"><Card><CardContent className="space-y-4"><h1 className="text-3xl font-black">새 기록 올리기</h1><div onClick={()=>fileRef.current?.click()} className="grid min-h-52 cursor-pointer place-items-center rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-6 text-center hover:bg-blue-50">{preview ? <img src={preview} className="max-h-80 rounded-xl object-contain"/> : <div><Camera className="mx-auto mb-3 h-10 w-10 text-blue-500"/><b>사진 영역을 눌러 선택</b><p className="mt-1 text-sm text-slate-500">모바일에서는 카메라 또는 앨범 선택</p></div>}<input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e=>chooseFile(e.target.files?.[0])}/></div><div className="rounded-2xl border border-slate-200 bg-white p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div>
+                      <p className="font-black">생물명 검색·동정</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-500">이름을 정확히 몰라도 “돔류”, “볼락류”, “게류”처럼 검색하거나 동정 요청으로 저장할 수 있습니다.</p>
+                    </div>
+                    {selectedSpecies && <span className={`rounded-full px-2 py-1 text-xs font-bold ${rarityClass(selectedSpecies.rarity)}`}>{selectedSpecies.rarity}</span>}
+                  </div>
+                  <Input placeholder="예: 볼락류, 돔류, 감성돔, 우럭" value={speciesQuery} onChange={e=>{setSpeciesQuery(e.target.value); setIdentificationMode("standard");}} />
+                  <div className="mt-3 grid gap-2 md:grid-cols-2">
+                    {speciesCandidates.map(sp => (
+                      <button key={sp.id} type="button" onClick={() => { setSelectedSpecies(sp); setIdentificationMode("standard"); setForm({...form, species: sp.commonName, category: sp.category}); }} className={`rounded-xl border p-3 text-left transition hover:border-blue-400 hover:bg-blue-50 ${selectedSpecies?.id === sp.id ? "border-blue-500 bg-blue-50" : "border-slate-200 bg-slate-50"}`}>
+                        <div className="flex items-center justify-between gap-2"><b>{sp.commonName}</b><span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${rarityClass(sp.rarity)}`}>{sp.rarity}</span></div>
+                        <p className="mt-1 text-xs text-slate-500">{sp.group} · {sp.scientificName}</p>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button type="button" variant={identificationMode === "request" ? "default" : "outline"} size="sm" onClick={() => { setIdentificationMode("request"); setSelectedSpecies(null); setForm({...form, species: speciesQuery || "미동정 생물", category: form.category}); }}>이름을 모르겠어요 · 동정 요청</Button>
+                    <Button type="button" variant="outline" size="sm" onClick={() => alert("AI 사진 동정은 다음 단계에서 연결할 예정입니다. 현재는 검색 후보와 동정 요청으로 기록을 보존합니다.")}>AI 후보 추천 준비중</Button>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2"><Input placeholder="선택된 표준명 또는 임시명" value={form.species} onChange={e=>{setForm({...form,species:e.target.value}); setSelectedSpecies(null);}}/><select className="rounded-xl border border-slate-200 px-3" value={form.category} onChange={e=>setForm({...form,category:e.target.value})}><option>물고기</option><option>갑각류</option><option>패류</option><option>두족류</option><option>기타</option></select></div><Input placeholder="공개 지역명 예: 부산 기장군 대라리" value={form.region} onChange={e=>setForm({...form,region:e.target.value})}/><div className="grid gap-3 md:grid-cols-[1fr_1fr_auto]"><Input placeholder="위도" value={form.latitude} onChange={e=>setForm({...form,latitude:e.target.value})}/><Input placeholder="경도" value={form.longitude} onChange={e=>setForm({...form,longitude:e.target.value})}/><Button variant="outline" onClick={getLocation}><Navigation className="mr-1 h-4 w-4"/>현재 위치</Button></div>{form.latitude && form.longitude && <iframe title="selected map" className="h-64 w-full rounded-2xl border" src={`https://www.openstreetmap.org/export/embed.html?bbox=${Number(form.longitude)-0.01}%2C${Number(form.latitude)-0.01}%2C${Number(form.longitude)+0.01}%2C${Number(form.latitude)+0.01}&layer=mapnik&marker=${form.latitude}%2C${form.longitude}`}/>}<Input placeholder="설명" value={form.caption} onChange={e=>setForm({...form,caption:e.target.value})}/><Button onClick={uploadPost} disabled={uploading} className="h-12"><Upload className="mr-2 h-5 w-5"/>{uploading?"업로드 중":"기록 올리기"}</Button></CardContent></Card></section>}
 
-        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-4"><div className="grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-3xl">🐟</div><div><p className="text-lg font-black">{currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
+      {tab === "dogam" && <section><h1 className="text-3xl font-black">연안 도감</h1><p className="mt-1 text-sm text-slate-500">사용자가 올린 게시글을 생물명 기준으로 자동 집계합니다.</p><div className="mt-5 grid gap-5 md:grid-cols-2 lg:grid-cols-3">{dogam.length ? dogam.map(d=><Card key={d.name} className="overflow-hidden">{d.image && <img src={d.image} className="h-40 w-full object-cover"/>}<CardContent><div className="flex items-center justify-between"><h2 className="text-xl font-black"><BookOpen className="mr-1 inline h-5 w-5 text-blue-600"/>{d.name}</h2><span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-600">{d.count}건</span></div><p className="mt-3 text-sm text-slate-600">최근 기록: {fmt(d.latest)}</p><p className="mt-2 text-sm text-slate-600">기록 지역: {Array.from(d.regions).slice(0,3).join(", ") || "-"}</p></CardContent></Card>) : <p className="text-slate-500">아직 실제 기록이 없습니다.</p>}</div></section>}
 
-        {tab === "rank" && <section><SectionTitle title="월간 Ho-cha 랭킹" desc="종 다양성, 정확한 기록, 방류 인증을 중심으로 점수를 부여합니다." /><div className="grid gap-4 md:grid-cols-2">{rankings.map((item) => <Card key={item.rank} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-600">{item.rank}</div><div><p className="font-black">{item.avatar} {item.name}</p><p className="text-sm text-slate-500">기록 {item.score}</p></div></div><p className="text-lg font-black text-blue-600">{item.points} pt</p></CardContent></Card>)}</div></section>}
-        {tab === "book" && <section><SectionTitle title="연안 도감" desc="기록된 생물은 도감에 자동 누적되며, 계절·지역·해황 정보와 연결됩니다." /><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{speciesBook.map((item) => { const Icon = item.icon; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600"><Icon className="h-6 w-6" /></div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건</p><p className="mt-4 text-sm text-slate-600"><CalendarDays className="mr-1 inline h-4 w-4" /> {item.season}</p><p className="mt-2 text-sm text-slate-600"><Compass className="mr-1 inline h-4 w-4" /> {item.point}</p></CardContent></Card>; })}</div></section>}
-        {tab === "weather" && <section className="grid gap-6 md:grid-cols-[1fr_420px] md:items-start"><div><SectionTitle title="지역별 해황" desc="현재는 데모 화면입니다. 이후 공공 해양 API와 연결합니다." /><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="grid h-96 place-items-center rounded-2xl bg-gradient-to-br from-blue-50 to-slate-100 text-center"><div><Map className="mx-auto mb-3 h-14 w-14 text-blue-500" /><p className="font-black">무료 GPS 기반 위치 저장</p><p className="mt-2 text-sm text-slate-500">지도 API 없이도 위도·경도 저장은 가능합니다.</p></div></div></CardContent></Card></div><WeatherCard /></section>}
-        {tab === "data" && <section><SectionTitle title="출현 모니터링" desc="시민 기록을 기반으로 계절·지역·수온별 연안 생물 출현 흐름을 확인합니다." /><div className="grid gap-5 md:grid-cols-2"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">수집 데이터</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 사진 기록, 생물명, 기록일</li><li>• 공개용 권역 위치</li><li>• 비공개 좌표 기반 출현 위치</li><li>• 추후 수온, 염분, 풍속, 파고 연결</li></ul></CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">운영 원칙</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 정확한 포인트는 공개하지 않음</li><li>• 금어기·금지체장·보호종 기록 검토</li><li>• 포획량보다 기록 정확도 중심 랭킹</li><li>• 장기적으로 연구·교육 자료화</li></ul></CardContent></Card></div></section>}
-      </main>}
+      {tab === "map" && <section><h1 className="text-3xl font-black">지도 피드</h1><p className="mt-1 text-sm text-slate-500">지도는 좌표 기반으로 확인하되, 공개 피드에는 지역명만 표시합니다.</p><div className="mt-5 grid gap-5 lg:grid-cols-[1fr_360px]"><Card className="overflow-hidden"><iframe title="map feed" className="h-[520px] w-full" src={mapSrc}/></Card><div className="space-y-3">{mapPosts.map(p=><Card key={p.id}><CardContent><p className="font-black"><MapPin className="mr-1 inline h-4 w-4 text-blue-600"/>{p.species_name}</p><p className="text-sm text-slate-600">{p.region || "지역명 없음"}</p><p className="mt-1 text-xs text-slate-400">좌표: {Number(p.latitude).toFixed(5)}, {Number(p.longitude).toFixed(5)}</p></CardContent></Card>)}</div></div></section>}
 
-      {authOpen && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-900/60 px-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><h2 className="text-2xl font-black text-slate-900">{authMode === "login" ? "로그인" : "회원가입"}</h2><p className="mt-2 text-sm leading-6 text-slate-500">Ho-cha 기록을 올리고 댓글을 남기려면 계정이 필요합니다.</p></div><button onClick={() => setAuthOpen(false)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="grid gap-3">{authMode === "signup" && <Input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="닉네임" className="rounded-xl border-slate-200 bg-slate-50" />}<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" className="rounded-xl border-slate-200 bg-slate-50" /><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 6자 이상" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleAuth} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700">{authMode === "login" ? "로그인하기" : "회원가입하기"}</Button>{authMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{authMessage}</p>}<button onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthMessage(""); }} className="text-sm font-bold text-blue-600">{authMode === "login" ? "처음 오셨나요? 회원가입" : "이미 계정이 있나요? 로그인"}</button></div></div></div>}
+      {tab === "profile" && <section><h1 className="text-3xl font-black">내 프로필</h1>{sessionUser ? <div className="mt-5 grid gap-5 md:grid-cols-[280px_1fr]"><Card><CardContent><div className="text-5xl">🐟</div><h2 className="mt-3 text-xl font-black">{profile?.nickname || "Ho-cha 사용자"}</h2><p className="text-sm text-slate-500">{sessionUser.email}</p><div className="mt-5 grid grid-cols-2 gap-3 text-center"><div className="rounded-xl bg-blue-50 p-3"><b className="text-2xl text-blue-600">{myPosts.length}</b><p className="text-xs">내 기록</p></div><div className="rounded-xl bg-blue-50 p-3"><b className="text-2xl text-blue-600">{new Set(myPosts.map(p=>p.species_name)).size}</b><p className="text-xs">기록 종</p></div></div></CardContent></Card><div className="grid gap-4 md:grid-cols-2">{myPosts.map(p=><PostCard key={p.id} post={p} userId={sessionUser.id} onLike={()=>toggleLike(p)} onComments={()=>loadComments(p.id)} onDelete={()=>deletePost(p)} isOpen={false} comments={[]} commentText="" setCommentText={()=>{}} addComment={()=>{}} />)}</div></div> : <Card className="mt-5"><CardContent><p>로그인이 필요합니다.</p></CardContent></Card>}</section>}
+    </main>
 
-      {commentPost && <div className="fixed inset-0 z-[90] grid place-items-center bg-slate-900/50 px-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-4 flex items-start justify-between"><div><h2 className="text-2xl font-black">댓글</h2><p className="mt-1 text-sm text-slate-500">{commentPost.species} · {commentPost.location}</p></div><button onClick={() => setCommentPost(null)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>{commentPost.isSample ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">샘플 게시글에는 댓글을 저장하지 않습니다. 실제 업로드된 게시글에서 댓글 기능을 테스트할 수 있습니다.</p> : <><div className="max-h-72 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{comments.length === 0 ? <p className="text-sm text-slate-500">아직 댓글이 없습니다.</p> : comments.map((c) => <div key={c.id} className="rounded-xl bg-white p-3 text-sm text-slate-700"><p>{c.content}</p><p className="mt-1 text-xs text-slate-400">{formatDate(c.created_at)}</p></div>)}</div><div className="mt-4 flex gap-2"><Input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="댓글을 입력하세요" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={addComment} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">등록</Button></div></>}</div></div>}
+    {authMode && <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"><Card className="w-full max-w-md"><CardContent className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-2xl font-black">{authMode === "login" ? "로그인" : "회원가입"}</h2><button onClick={()=>setAuthMode(null)}><X/></button></div>{authMode === "signup" && <Input placeholder="닉네임" value={nickname} onChange={e=>setNickname(e.target.value)}/>}<Input type="email" placeholder="이메일" value={authEmail} onChange={e=>setAuthEmail(e.target.value)}/><Input type="password" placeholder="비밀번호" value={authPassword} onChange={e=>setAuthPassword(e.target.value)}/><Button className="w-full" onClick={authMode === "login" ? signIn : signUp}>{authMode === "login" ? "로그인" : "회원가입"}</Button></CardContent></Card></div>}
+  </div>;
+}
 
-      <footer className="mt-10 bg-slate-950 text-white"><div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-8 md:flex-row md:items-center md:justify-between"><p className="text-3xl font-black">Ho-cha</p><div className="flex flex-wrap gap-6 text-sm text-slate-300"><button>이용약관</button><button>개인정보처리방침</button><button>운영정책</button><button>문의하기</button></div><p className="text-sm text-slate-400">© 2026 Ho-cha. All rights reserved.</p></div></footer>
-    </div>
-  );
+function PostCard({ post, userId, onLike, onComments, onDelete, isOpen, comments, commentText, setCommentText, addComment }: any) {
+  const liked = post.likes?.some((l:any) => l.user_id === userId);
+  const canDelete = userId && post.user_id === userId;
+  return <Card className="overflow-hidden"><div className="flex items-center justify-between p-4"><div><p className="font-black">{post.profiles?.nickname || "Ho-cha 사용자"}</p><p className="text-xs text-slate-500">{fmt(post.created_at)} · {post.region || "지역 미입력"}</p></div>{canDelete && <Button variant="ghost" size="sm" onClick={onDelete}><Trash2 className="h-4 w-4"/></Button>}</div>{post.image_url && <img src={post.image_url} className="h-64 w-full object-cover"/>}<CardContent><div className="mb-2 flex items-center gap-2"><h2 className="text-xl font-black">{post.species_name}</h2>{post.category && <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{post.category}</span>}{String(post.species_name).startsWith("동정 요청") && <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">동정 요청</span>}</div>{post.caption && <p className="mb-3 whitespace-pre-wrap text-sm leading-6 text-slate-700">{post.caption}</p>}<div className="flex items-center gap-4 text-sm"><button onClick={onLike} className={`flex items-center gap-1 font-bold ${liked ? "text-red-500" : "text-slate-500"}`}><Heart className={`h-5 w-5 ${liked ? "fill-red-500" : ""}`}/>{post.likes?.length || 0}</button><button onClick={onComments} className="flex items-center gap-1 font-bold text-slate-500"><MessageCircle className="h-5 w-5"/>댓글 {post.comments?.length || 0}</button></div>{isOpen && <div className="mt-4 border-t pt-4"><div className="space-y-2">{comments.map((c:any)=><div key={c.id} className="rounded-xl bg-slate-50 p-3 text-sm"><b>{c.profiles?.nickname || "사용자"}</b><p>{c.content}</p></div>)}</div><div className="mt-3 flex gap-2"><Input value={commentText} onChange={e=>setCommentText(e.target.value)} placeholder="댓글 입력"/><Button onClick={addComment}>등록</Button></div></div>}</CardContent></Card>;
 }
