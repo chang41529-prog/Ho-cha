@@ -2,6 +2,9 @@ create table if not exists profiles (
   id uuid references auth.users(id) on delete cascade primary key,
   nickname text,
   avatar_url text,
+  bio text,
+  favorite_group text,
+  featured_badge text,
   created_at timestamp with time zone default now()
 );
 

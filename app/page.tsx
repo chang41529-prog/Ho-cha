@@ -148,6 +148,14 @@ type LocationState = {
   accuracy: number | null;
 };
 
+type ProfileForm = {
+  nickname: string;
+  bio: string;
+  favorite_group: string;
+  featured_badge: string;
+  avatar_url: string;
+};
+
 function formatDate(value?: string) {
   if (!value) return "방금 전";
   const d = new Date(value);
@@ -335,6 +343,9 @@ export default function HoChaWebMVP() {
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [profileForm, setProfileForm] = useState<ProfileForm>({ nickname: "", bio: "", favorite_group: "", featured_badge: "", avatar_url: "" });
+  const [profileMessage, setProfileMessage] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
   const [authMessage, setAuthMessage] = useState("");
   const [commentPost, setCommentPost] = useState<Post | null>(null);
   const [comments, setComments] = useState<Comment[]>([]);
@@ -410,6 +421,54 @@ export default function HoChaWebMVP() {
     return { name: "새로운 관찰자", score, progress: Math.min(100, Math.round((score / 30) * 100)), next: "초보 기록자" };
   }, [currentUserPosts, mySpeciesCount, myLocationCount, myVerifiedSpeciesCount]);
 
+  const fetchProfile = async () => {
+    if (!supabase || !currentUser) return;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("nickname, bio, favorite_group, featured_badge, avatar_url")
+      .eq("id", currentUser.id)
+      .maybeSingle();
+
+    if (error) {
+      setProfileForm({
+        nickname: currentUser.email?.split("@")[0] || "Ho-cha 사용자",
+        bio: "",
+        favorite_group: "",
+        featured_badge: "",
+        avatar_url: "",
+      });
+      return;
+    }
+
+    setProfileForm({
+      nickname: data?.nickname || currentUser.email?.split("@")[0] || "Ho-cha 사용자",
+      bio: data?.bio || "",
+      favorite_group: data?.favorite_group || "",
+      featured_badge: data?.featured_badge || "",
+      avatar_url: data?.avatar_url || "",
+    });
+  };
+
+  const saveProfile = async () => {
+    if (!supabase || !currentUser) return;
+    setSavingProfile(true);
+    setProfileMessage("저장 중입니다...");
+    const { error } = await supabase.from("profiles").upsert({
+      id: currentUser.id,
+      nickname: profileForm.nickname.trim() || currentUser.email?.split("@")[0] || "Ho-cha 사용자",
+      bio: profileForm.bio.trim(),
+      favorite_group: profileForm.favorite_group,
+      featured_badge: profileForm.featured_badge,
+      avatar_url: profileForm.avatar_url.trim(),
+    });
+    setSavingProfile(false);
+    if (error) {
+      setProfileMessage("저장 실패: Supabase에서 profiles 컬럼 추가 SQL을 먼저 실행했는지 확인해주세요.");
+      return;
+    }
+    setProfileMessage("프로필이 저장되었습니다.");
+  };
+
   const fetchPosts = async () => {
     if (!supabase) return;
     const { data, error } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
@@ -453,6 +512,7 @@ export default function HoChaWebMVP() {
 
   useEffect(() => {
     if (supabase) fetchPosts();
+    if (currentUser) fetchProfile();
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -688,7 +748,7 @@ export default function HoChaWebMVP() {
 
         {tab === "stats" && <section><SectionTitle title="시즌·출현 통계" desc="현재 저장된 기록을 바탕으로 자동 계산한 요약입니다." /><div className="grid gap-5 lg:grid-cols-2"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="mb-4 flex items-center gap-2"><BarChart3 className="h-6 w-6 text-blue-600" /><h3 className="text-lg font-black">가장 많이 기록된 생물</h3></div>{weeklyStats.topSpecies.length === 0 ? <p className="text-sm text-slate-500">아직 실제 기록이 없습니다.</p> : <div className="space-y-3">{weeklyStats.topSpecies.map(([name, count], index) => <div key={name} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><div className="grid h-8 w-8 place-items-center rounded-full bg-blue-100 text-sm font-black text-blue-700">{index + 1}</div><p className="flex-1 font-bold text-slate-800">{name}</p><p className="font-black text-blue-600">{count}건</p></div>)}</div>}</CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="mb-4 flex items-center gap-2"><MapPin className="h-6 w-6 text-emerald-600" /><h3 className="text-lg font-black">기록이 많은 지역</h3></div>{weeklyStats.topRegions.length === 0 ? <p className="text-sm text-slate-500">아직 위치 기록이 없습니다.</p> : <div className="space-y-3">{weeklyStats.topRegions.map(([name, count], index) => <div key={name} className="flex items-center gap-3 rounded-xl bg-slate-50 p-3"><div className="grid h-8 w-8 place-items-center rounded-full bg-emerald-100 text-sm font-black text-emerald-700">{index + 1}</div><p className="flex-1 font-bold text-slate-800">{name}</p><p className="font-black text-emerald-600">{count}건</p></div>)}</div>}</CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm lg:col-span-2"><CardContent className="grid gap-4 p-6 md:grid-cols-4"><div className="rounded-2xl bg-blue-50 p-4"><p className="text-xs font-bold text-blue-600">전체 기록</p><p className="mt-1 text-3xl font-black">{weeklyStats.total}</p></div><div className="rounded-2xl bg-emerald-50 p-4"><p className="text-xs font-bold text-emerald-700">좌표 저장</p><p className="mt-1 text-3xl font-black">{weeklyStats.locatedCount}</p></div><div className="rounded-2xl bg-purple-50 p-4"><p className="text-xs font-bold text-purple-700">표준종 연결</p><p className="mt-1 text-3xl font-black">{weeklyStats.verifiedCount}</p></div><div className="rounded-2xl bg-amber-50 p-4"><p className="text-xs font-bold text-amber-700">동정 요청</p><p className="mt-1 text-3xl font-black">{weeklyStats.requestCount}</p></div></CardContent></Card></div></section>}
 
-        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-4"><div className="grid h-16 w-16 place-items-center rounded-3xl bg-blue-50 text-3xl">🐟</div><div><p className="text-lg font-black">{currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">내 레벨</h3></div><p className="mt-3 text-2xl font-black text-slate-900">{userLevel.name}</p><p className="mt-1 text-sm text-slate-500">활동 점수 {userLevel.score}점 · 다음 단계: {userLevel.next}</p><div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${userLevel.progress}%` }} /></div><p className="mt-3 text-xs leading-5 text-slate-500">기록 수, 종 다양성, 위치 기록, 표준종 연결을 바탕으로 계산됩니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">내 배지</h3>{myBadges.length === 0 ? <p className="mt-2 text-sm leading-6 text-slate-600">첫 기록을 올리면 배지가 표시됩니다.</p> : <div className="mt-3 flex flex-wrap gap-2">{myBadges.map((badge) => <span key={badge} className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{badge}</span>)}</div>}<p className="mt-3 text-xs leading-5 text-slate-500">배지는 포획량보다 기록 다양성, 위치 기록, 동정 참여를 중심으로 확장할 예정입니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
+        {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm"><div className="h-24 bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-300" /><CardContent className="p-6"><div className="-mt-14 flex items-end gap-4"><div className="grid h-20 w-20 place-items-center overflow-hidden rounded-3xl border-4 border-white bg-blue-50 text-4xl shadow-sm">{profileForm.avatar_url ? <img src={profileForm.avatar_url} alt="프로필 이미지" className="h-full w-full object-cover" /> : "🐟"}</div><div className="pb-1"><p className="text-xl font-black">{profileForm.nickname || currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div>{profileForm.bio && <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{profileForm.bio}</p>}<div className="mt-4 flex flex-wrap gap-2">{profileForm.favorite_group && <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">관심 생물군: {profileForm.favorite_group}</span>}{profileForm.featured_badge && <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700">대표 배지: {profileForm.featured_badge}</span>}</div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">프로필 꾸미기</h3></div><div className="mt-4 grid gap-3"><Input value={profileForm.nickname} onChange={(e) => setProfileForm({ ...profileForm, nickname: e.target.value })} placeholder="닉네임" className="rounded-xl border-slate-200 bg-slate-50" /><Input value={profileForm.bio} onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })} placeholder="한 줄 자기소개" className="rounded-xl border-slate-200 bg-slate-50" /><Input value={profileForm.avatar_url} onChange={(e) => setProfileForm({ ...profileForm, avatar_url: e.target.value })} placeholder="프로필 이미지 URL 선택 입력" className="rounded-xl border-slate-200 bg-slate-50" /><select value={profileForm.favorite_group} onChange={(e) => setProfileForm({ ...profileForm, favorite_group: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"><option value="">관심 생물군 선택</option><option value="물고기">물고기</option><option value="갑각류">갑각류</option><option value="패류">패류</option><option value="두족류">두족류</option><option value="기타 연안생물">기타 연안생물</option></select><select value={profileForm.featured_badge} onChange={(e) => setProfileForm({ ...profileForm, featured_badge: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"><option value="">대표 배지 선택</option>{myBadges.map((badge) => <option key={badge} value={badge}>{badge}</option>)}</select><Button onClick={saveProfile} disabled={savingProfile} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">{savingProfile ? "저장 중..." : "프로필 저장"}</Button>{profileMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{profileMessage}</p>}</div></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">내 레벨</h3></div><p className="mt-3 text-2xl font-black text-slate-900">{userLevel.name}</p><p className="mt-1 text-sm text-slate-500">활동 점수 {userLevel.score}점 · 다음 단계: {userLevel.next}</p><div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${userLevel.progress}%` }} /></div><p className="mt-3 text-xs leading-5 text-slate-500">기록 수, 종 다양성, 위치 기록, 표준종 연결을 바탕으로 계산됩니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">내 배지</h3>{myBadges.length === 0 ? <p className="mt-2 text-sm leading-6 text-slate-600">첫 기록을 올리면 배지가 표시됩니다.</p> : <div className="mt-3 flex flex-wrap gap-2">{myBadges.map((badge) => <span key={badge} className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{badge}</span>)}</div>}<p className="mt-3 text-xs leading-5 text-slate-500">배지는 포획량보다 기록 다양성, 위치 기록, 동정 참여를 중심으로 확장할 예정입니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
 
         {tab === "rank" && <section><SectionTitle title="월간 Ho-cha 랭킹" desc="종 다양성, 정확한 기록, 방류 인증을 중심으로 점수를 부여합니다." /><div className="grid gap-4 md:grid-cols-2">{rankings.map((item) => <Card key={item.rank} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-600">{item.rank}</div><div><p className="font-black">{item.avatar} {item.name}</p><p className="text-sm text-slate-500">기록 {item.score}</p></div></div><p className="text-lg font-black text-blue-600">{item.points} pt</p></CardContent></Card>)}</div></section>}
         {tab === "book" && <section><SectionTitle title="연안 도감" desc="실제 업로드 기록을 기준으로 자동 집계합니다. 표준종 연결 기록과 동정 요청 기록을 구분합니다." />{dogamItems.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><BookOpen className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 실제 도감 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 도감이 자동으로 채워집니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">기록 올리기</Button></div> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{dogamItems.map((item) => { const meta = item.meta; const statusLabel = meta ? "표준종 연결" : item.requestCount > 0 ? "동정 요청 포함" : "미확인"; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600">{meta?.category === "shell" ? <Shell className="h-6 w-6" /> : <Fish className="h-6 w-6" />}</div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건 · 지역 {item.locations.size}곳</p><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{meta?.group || "사용자 입력"}</span><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{statusLabel}</span>{meta && <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {meta.rarity}</span>}</div>{meta && <p className="mt-3 text-xs italic text-slate-500">{meta.scientificName}</p>}<p className="mt-2 text-sm leading-6 text-slate-600">{meta?.note || "표준종 후보와 연결되지 않은 기록입니다. 이후 동정 검토 기능으로 정리할 수 있습니다."}</p></CardContent></Card>; })}</div>}</section>}
