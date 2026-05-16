@@ -352,7 +352,7 @@ export default function HoChaWebMVP() {
   }, [currentUserPosts, mySpeciesCount, myLocationCount]);
   const filteredPosts = useMemo(() => posts.filter((post) => `${post.species} ${post.location} ${post.caption} ${post.user}`.toLowerCase().includes(query.toLowerCase())), [query, posts]);
   const dogamItems = useMemo(() => {
-    const map = new Map<string, { name: string; count: number; locations: Set<string>; meta: SpeciesCandidate | null; requestCount: number }>();
+    const map = new globalThis.Map<string, { name: string; count: number; locations: Set<string>; meta: SpeciesCandidate | null; requestCount: number }>();
     posts.filter((post) => !post.isSample).forEach((post) => {
       const meta = getSpeciesMeta(post.species);
       const key = meta?.standardName || post.species || "미동정 생물";
