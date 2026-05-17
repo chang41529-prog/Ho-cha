@@ -77,6 +77,48 @@ const speciesCatalog = [
   { standardName: "고둥류", scientificName: "Gastropoda spp.", group: "패류", category: "shell", aliases: ["고둥", "소라", "패류", "조개", "복족류"], rarity: "흔함", note: "정확한 종을 모르면 패류/고둥류로 기록 가능" },
 ];
 
+type SpeciesInfo = {
+  protectedStatus: string;
+  closedSeason: string;
+  minSize: string;
+  seasonal: string;
+  caution: string;
+  infoLevel: "safe" | "watch" | "caution";
+};
+
+const defaultSpeciesInfo: SpeciesInfo = {
+  protectedStatus: "공식 보호종 정보 확인 필요",
+  closedSeason: "공식 금어기 기준 확인 필요",
+  minSize: "공식 금지체장 기준 확인 필요",
+  seasonal: "지역·수온에 따라 차이 있음",
+  caution: "생물 동정이 불확실하면 채집보다 관찰 기록을 우선하세요.",
+  infoLevel: "watch",
+};
+
+const speciesInfoCatalog: Record<string, SpeciesInfo> = {
+  "쥐노래미": { protectedStatus: "일반 기록 대상", closedSeason: "앱 DB 확인 필요", minSize: "앱 DB 확인 필요", seasonal: "봄·가을 기록이 많은 편", caution: "등지느러미 가시에 주의하고 작은 개체는 방류를 권장합니다.", infoLevel: "safe" },
+  "조피볼락": { protectedStatus: "일반 기록 대상", closedSeason: "앱 DB 확인 필요", minSize: "앱 DB 확인 필요", seasonal: "겨울~봄 연안 기록이 많은 편", caution: "가시에 찔리지 않도록 장갑 사용을 권장합니다.", infoLevel: "safe" },
+  "감성돔": { protectedStatus: "일반 기록 대상", closedSeason: "공식 금어기 기준 확인 필요", minSize: "공식 금지체장 기준 확인 필요", seasonal: "가을~겨울 기록이 많은 편", caution: "어린 개체와 산란기 개체 보호를 위해 금어기·체장 기준 확인이 필요합니다.", infoLevel: "watch" },
+  "참돔": { protectedStatus: "일반 기록 대상", closedSeason: "공식 금어기 기준 확인 필요", minSize: "공식 금지체장 기준 확인 필요", seasonal: "봄~가을 지역별 차이", caution: "유사한 돔류가 많아 동정 오류에 주의하세요.", infoLevel: "watch" },
+  "돌돔": { protectedStatus: "일반 기록 대상", closedSeason: "공식 금어기 기준 확인 필요", minSize: "공식 금지체장 기준 확인 필요", seasonal: "여름~가을 기록이 많은 편", caution: "치어·소형 개체는 방류를 권장합니다.", infoLevel: "watch" },
+  "망둑어류": { protectedStatus: "종별 확인 필요", closedSeason: "종별 확인 필요", minSize: "종별 확인 필요", seasonal: "봄~가을 조간대·하구 기록 많음", caution: "망둑어류는 유사종이 많아 과/류 수준 기록 후 동정 요청을 권장합니다.", infoLevel: "watch" },
+  "꽃게": { protectedStatus: "일반 기록 대상", closedSeason: "공식 금어기 기준 확인 필요", minSize: "공식 금지체장 기준 확인 필요", seasonal: "봄·가을 기록이 많은 편", caution: "집게와 날카로운 등갑에 주의하고 암컷·소형 개체 보호 기준을 확인하세요.", infoLevel: "caution" },
+  "갑오징어": { protectedStatus: "일반 기록 대상", closedSeason: "공식 금어기 기준 확인 필요", minSize: "공식 기준 확인 필요", seasonal: "봄 산란기·가을 시즌 기록이 많은 편", caution: "먹물과 미끄러운 표면에 주의하고 산란기 개체 보호가 중요합니다.", infoLevel: "watch" },
+  "고둥류": { protectedStatus: "종별 확인 필요", closedSeason: "종별 확인 필요", minSize: "종별 확인 필요", seasonal: "연중 관찰 가능", caution: "독성 패류·유사종 가능성이 있어 섭취 목적 채집은 지양하고 정확한 동정이 필요합니다.", infoLevel: "caution" },
+};
+
+function getSpeciesInfo(name: string): SpeciesInfo {
+  const meta = getSpeciesMeta(name);
+  if (meta && speciesInfoCatalog[meta.standardName]) return speciesInfoCatalog[meta.standardName];
+  return defaultSpeciesInfo;
+}
+
+function getTimeOfDay(dateText: string) {
+  if (dateText.includes("오전") || dateText.includes("AM")) return "오전 기록";
+  if (dateText.includes("오후") || dateText.includes("PM")) return "오후 기록";
+  return "기록 시간 저장";
+}
+
 type SpeciesCandidate = (typeof speciesCatalog)[number];
 
 function findSpeciesCandidates(query: string) {
@@ -239,6 +281,60 @@ function SectionTitle({ title, desc, action }: { title: string; desc?: string; a
   );
 }
 
+function ObservationInfoCard({ post }: { post: Post }) {
+  return (
+    <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-2 flex items-center gap-2 text-sm font-black text-slate-800">
+        <CalendarDays className="h-4 w-4 text-blue-600" /> 관찰 정보
+      </div>
+      <div className="grid gap-2 text-xs leading-5 text-slate-600 md:grid-cols-2">
+        <div className="rounded-xl bg-white p-2"><span className="font-bold text-slate-800">시간</span> {post.date}</div>
+        <div className="rounded-xl bg-white p-2"><span className="font-bold text-slate-800">공개 지역</span> {post.location || "지역 미입력"}</div>
+        <div className="rounded-xl bg-white p-2"><span className="font-bold text-slate-800">시간대</span> {getTimeOfDay(post.date)}</div>
+        <div className="rounded-xl bg-white p-2"><span className="font-bold text-slate-800">위치 데이터</span> {post.latitude && post.longitude ? "GPS 저장됨" : "권역명만 표시"}</div>
+        {post.temp && <div className="rounded-xl bg-white p-2"><span className="font-bold text-slate-800">수온</span> {post.temp}</div>}
+        {post.wave && <div className="rounded-xl bg-white p-2"><span className="font-bold text-slate-800">파고</span> {post.wave}</div>}
+      </div>
+      <p className="mt-2 text-[11px] leading-4 text-slate-400">정확 좌표는 데이터 분석용으로만 저장하고, 공개 피드에는 권역명 중심으로 표시합니다.</p>
+    </div>
+  );
+}
+
+function SpeciesRegulationCard({ post }: { post: Post }) {
+  const info = getSpeciesInfo(post.species);
+  const tone = info.infoLevel === "caution" ? "border-red-200 bg-red-50 text-red-700" : info.infoLevel === "watch" ? "border-amber-200 bg-amber-50 text-amber-800" : "border-emerald-200 bg-emerald-50 text-emerald-700";
+  return (
+    <div className={`mt-3 rounded-2xl border p-3 ${tone}`}>
+      <div className="mb-2 flex items-center gap-2 text-sm font-black">
+        <ShieldCheck className="h-4 w-4" /> 생물 안전·규정 정보
+      </div>
+      <div className="grid gap-2 text-xs leading-5 md:grid-cols-2">
+        <div><span className="font-black">보호종</span> · {info.protectedStatus}</div>
+        <div><span className="font-black">금어기</span> · {info.closedSeason}</div>
+        <div><span className="font-black">금지체장</span> · {info.minSize}</div>
+        <div><span className="font-black">제철/시즌</span> · {info.seasonal}</div>
+      </div>
+      <p className="mt-2 text-xs leading-5"><span className="font-black">주의</span> · {info.caution}</p>
+      <p className="mt-2 text-[11px] leading-4 opacity-80">금어기·금지체장·보호종 정보는 법령 개정 가능성이 있으므로 공식 기준 확인용 데이터로 관리해야 합니다.</p>
+    </div>
+  );
+}
+
+function MonthlyInfoCards({ month }: { month: number }) {
+  const monthLabel = `${month}월`;
+  const seasonal = speciesCatalog.filter((s) => {
+    const info = getSpeciesInfo(s.standardName);
+    return info.seasonal.includes("봄") || info.seasonal.includes("가을") || info.seasonal.includes("연중");
+  }).slice(0, 4);
+  return (
+    <div className="grid gap-4 md:grid-cols-3">
+      <Card className="rounded-2xl border-blue-200 bg-blue-50 shadow-sm"><CardContent className="p-5"><CalendarDays className="mb-2 h-6 w-6 text-blue-600" /><p className="text-sm font-bold text-blue-700">{monthLabel} 관찰 정보</p><p className="mt-2 text-sm leading-6 text-slate-700">월별 금어기·금지체장 정보는 공식 기준과 연결할 수 있도록 구조를 마련했습니다.</p></CardContent></Card>
+      <Card className="rounded-2xl border-emerald-200 bg-emerald-50 shadow-sm"><CardContent className="p-5"><Leaf className="mb-2 h-6 w-6 text-emerald-600" /><p className="text-sm font-bold text-emerald-700">제철·시즌 후보</p><div className="mt-3 flex flex-wrap gap-2">{seasonal.map((s) => <span key={s.standardName} className="rounded-full bg-white px-3 py-1 text-xs font-black text-emerald-700">{s.standardName}</span>)}</div></CardContent></Card>
+      <Card className="rounded-2xl border-amber-200 bg-amber-50 shadow-sm"><CardContent className="p-5"><Info className="mb-2 h-6 w-6 text-amber-600" /><p className="text-sm font-bold text-amber-700">주의 생물 안내</p><p className="mt-2 text-sm leading-6 text-slate-700">가시, 독성, 집게, 패각 절단면 등 현장 안전 주의사항을 종 정보와 함께 표시합니다.</p></CardContent></Card>
+    </div>
+  );
+}
+
 function PostCard({
   post,
   compact = false,
@@ -287,6 +383,8 @@ function PostCard({
           {post.temp && <span className="rounded-full bg-slate-100 px-2 py-1">수온 {post.temp}</span>}
           {post.wave && <span className="rounded-full bg-slate-100 px-2 py-1">파고 {post.wave}</span>}
         </div>
+        {!compact && <ObservationInfoCard post={post} />}
+        {!compact && <SpeciesRegulationCard post={post} />}
         <div className="mt-4 flex items-center gap-4 text-sm text-slate-500">
           <button onClick={() => onLike(post)} className={`flex items-center gap-1 font-bold transition ${post.likedByMe ? "text-red-500" : "hover:text-red-500"}`}>
             <Heart className={`h-4 w-4 ${post.likedByMe ? "fill-current" : ""}`} />{post.likes}
@@ -791,7 +889,7 @@ export default function HoChaWebMVP() {
     <div className="flex items-center gap-2"><Button onClick={() => openAuth("login")} variant="outline" className="rounded-xl border-slate-200 bg-slate-50 font-bold"><LogIn className="mr-1 h-4 w-4" />로그인</Button><Button onClick={() => openAuth("signup")} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700"><UserPlus className="mr-1 h-4 w-4" />회원가입</Button></div>
   );
 
-  const navItems = [["home", "홈"], ["feed", "피드"], ["upload", "기록 올리기"], ["identify", "동정 요청"], ["stats", "출현 통계"], ["book", "도감"], ["rank", "랭킹"], ["weather", "해황"], ["profile", "내 프로필"]];
+  const navItems = [["home", "홈"], ["feed", "피드"], ["upload", "기록 올리기"], ["identify", "동정 요청"], ["stats", "출현 통계"], ["info", "생물 정보"], ["book", "도감"], ["rank", "랭킹"], ["weather", "해황"], ["profile", "내 프로필"]];
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -822,6 +920,8 @@ export default function HoChaWebMVP() {
         {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm"><div className="h-24 bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-300" /><CardContent className="p-6"><div className="-mt-14 flex items-end gap-4"><div className="grid h-20 w-20 place-items-center overflow-hidden rounded-full border-4 border-white bg-blue-50 text-4xl shadow-sm">{profileForm.avatar_url ? <img src={profileForm.avatar_url} alt="프로필 이미지" className="h-full w-full object-cover" /> : "🐟"}</div><div className="pb-1"><p className="text-xl font-black">{profileForm.nickname || currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div>{profileForm.bio && <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{profileForm.bio}</p>}<div className="mt-4 flex flex-wrap gap-2">{profileForm.favorite_group && <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">관심 생물군: {profileForm.favorite_group}</span>}{profileForm.featured_badge && <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700">대표 배지: {profileForm.featured_badge}</span>}</div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => setTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">프로필 꾸미기</h3></div><div className="mt-4 grid gap-3"><Input value={profileForm.nickname} onChange={(e) => setProfileForm({ ...profileForm, nickname: e.target.value })} placeholder="닉네임" className="rounded-xl border-slate-200 bg-slate-50" /><Input value={profileForm.bio} onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })} placeholder="한 줄 자기소개" className="rounded-xl border-slate-200 bg-slate-50" /><label className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-4 text-center transition hover:border-blue-300 hover:bg-blue-50"><input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setAvatarFile(file); setProfileMessage("프로필 저장을 누르면 새 이미지가 적용됩니다."); } }} /><div className="mx-auto mb-2 grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-white text-2xl shadow-sm">{profileForm.avatar_url ? <img src={profileForm.avatar_url} alt="현재 프로필 이미지" className="h-full w-full object-cover" /> : "🐟"}</div><p className="text-sm font-black text-slate-800">프로필 사진 업로드</p><p className="mt-1 text-xs text-slate-500">{avatarFile ? avatarFile.name : "클릭해서 사진을 선택하세요"}</p></label><select value={profileForm.favorite_group} onChange={(e) => setProfileForm({ ...profileForm, favorite_group: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"><option value="">관심 생물군 선택</option><option value="물고기">물고기</option><option value="갑각류">갑각류</option><option value="패류">패류</option><option value="두족류">두족류</option><option value="기타 연안생물">기타 연안생물</option></select><select value={profileForm.featured_badge} onChange={(e) => setProfileForm({ ...profileForm, featured_badge: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"><option value="">대표 배지 선택</option>{myBadges.map((badge) => <option key={badge} value={badge}>{badge}</option>)}</select><Button onClick={saveProfile} disabled={savingProfile} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">{savingProfile ? "저장 중..." : "프로필 저장"}</Button>{profileMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{profileMessage}</p>}</div></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">내 레벨</h3></div><p className="mt-3 text-2xl font-black text-slate-900">{userLevel.name}</p><p className="mt-1 text-sm text-slate-500">활동 점수 {userLevel.score}점 · 다음 단계: {userLevel.next}</p><div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${userLevel.progress}%` }} /></div><p className="mt-3 text-xs leading-5 text-slate-500">기록 수, 종 다양성, 위치 기록, 표준종 연결을 바탕으로 계산됩니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">내 배지</h3>{myBadges.length === 0 ? <p className="mt-2 text-sm leading-6 text-slate-600">첫 기록을 올리면 배지가 표시됩니다.</p> : <div className="mt-3 flex flex-wrap gap-2">{myBadges.map((badge) => <span key={badge} className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{badge}</span>)}</div>}<p className="mt-3 text-xs leading-5 text-slate-500">배지는 포획량보다 기록 다양성, 위치 기록, 동정 참여를 중심으로 확장할 예정입니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="개인 도감" desc="내가 직접 기록한 생물 컬렉션입니다." />{personalDogam.length === 0 ? <div className="mb-6 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center"><BookOpen className="mx-auto mb-3 h-10 w-10 text-slate-400" /><p className="font-black">아직 개인 도감이 비어 있습니다</p><p className="mt-2 text-sm text-slate-500">기록을 올리면 생물별 카드가 자동으로 만들어집니다.</p></div> : <div className="mb-8 grid gap-4 md:grid-cols-2">{personalDogam.map((item) => <Card key={item.name} className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm"><img src={item.representativeImage} alt={item.name} className="h-32 w-full object-cover" /><CardContent className="p-4"><div className="flex flex-wrap items-center gap-2"><p className="text-lg font-black text-slate-900">{item.name}</p>{item.meta && <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {item.meta.rarity}</span>}</div><p className="mt-2 text-sm text-slate-500">총 기록 {item.count}건 · 최근 {item.latestLocation || "지역 미입력"}</p><p className="mt-1 text-xs text-slate-400">첫 기록 {item.firstDate} · 최근 기록 {item.latestDate}</p>{item.meta && <p className="mt-2 text-xs italic text-slate-500">{item.meta.scientificName}</p>}</CardContent></Card>)}</div>}<SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} />)}</div>}</div></div></>}</section>}
 
         {tab === "rank" && <section><SectionTitle title="월간 Ho-cha 랭킹" desc="종 다양성, 정확한 기록, 방류 인증을 중심으로 점수를 부여합니다." /><div className="grid gap-4 md:grid-cols-2">{rankings.map((item) => <Card key={item.rank} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-600">{item.rank}</div><div><p className="font-black">{item.avatar} {item.name}</p><p className="text-sm text-slate-500">기록 {item.score}</p></div></div><p className="text-lg font-black text-blue-600">{item.points} pt</p></CardContent></Card>)}</div></section>}
+        {tab === "info" && <section><SectionTitle title="생물 정보와 안전 가이드" desc="보호종, 금어기, 금지체장, 제철 정보, 유해·주의 생물 정보를 한곳에서 확인합니다." /><MonthlyInfoCards month={new Date().getMonth() + 1} /><div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{speciesCatalog.map((sp) => { const info = getSpeciesInfo(sp.standardName); return <Card key={sp.standardName} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-3 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-blue-600">{sp.category === "shell" ? <Shell className="h-5 w-5" /> : <Fish className="h-5 w-5" />}</div><div><p className="font-black text-slate-900">{sp.standardName}</p><p className="text-xs italic text-slate-500">{sp.scientificName}</p></div></div><div className="mb-3 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{sp.group}</span><span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">앱 희귀도 {sp.rarity}</span></div><div className="space-y-2 text-sm leading-6 text-slate-600"><p><span className="font-black text-slate-800">보호종</span> · {info.protectedStatus}</p><p><span className="font-black text-slate-800">금어기</span> · {info.closedSeason}</p><p><span className="font-black text-slate-800">금지체장</span> · {info.minSize}</p><p><span className="font-black text-slate-800">제철/시즌</span> · {info.seasonal}</p><p className="rounded-xl bg-slate-50 p-3 text-xs leading-5"><span className="font-black">주의</span> · {info.caution}</p></div></CardContent></Card>; })}</div><Card className="mt-6 rounded-2xl border-amber-200 bg-amber-50 shadow-sm"><CardContent className="p-5"><p className="font-black text-amber-800">운영 기준</p><p className="mt-2 text-sm leading-6 text-slate-700">현재 포함된 생물 정보는 기능 확인용 기본 데이터입니다. 실제 서비스 운영 전에는 해양수산부 금어기·금지체장 기준, 국립수산과학원 자료, 해양보호생물 지정현황을 기준으로 species_master 데이터를 검수해야 합니다.</p></CardContent></Card></section>}
+
         {tab === "book" && <section><SectionTitle title="연안 도감" desc="실제 업로드 기록을 기준으로 자동 집계합니다. 표준종 연결 기록과 동정 요청 기록을 구분합니다." />{dogamItems.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><BookOpen className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 실제 도감 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 도감이 자동으로 채워집니다.</p><Button onClick={() => setTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">기록 올리기</Button></div> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{dogamItems.map((item) => { const meta = item.meta; const statusLabel = meta ? "표준종 연결" : item.requestCount > 0 ? "동정 요청 포함" : "미확인"; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600">{meta?.category === "shell" ? <Shell className="h-6 w-6" /> : <Fish className="h-6 w-6" />}</div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건 · 지역 {item.locations.size}곳</p><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{meta?.group || "사용자 입력"}</span><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{statusLabel}</span>{meta && <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {meta.rarity}</span>}</div>{meta && <p className="mt-3 text-xs italic text-slate-500">{meta.scientificName}</p>}<p className="mt-2 text-sm leading-6 text-slate-600">{meta?.note || "표준종 후보와 연결되지 않은 기록입니다. 이후 동정 검토 기능으로 정리할 수 있습니다."}</p></CardContent></Card>; })}</div>}</section>}
         {tab === "weather" && <section className="grid gap-6 md:grid-cols-[1fr_420px] md:items-start"><div><SectionTitle title="지역별 해황" desc="현재는 데모 화면입니다. 이후 공공 해양 API와 연결합니다." /><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="grid h-96 place-items-center rounded-2xl bg-gradient-to-br from-blue-50 to-slate-100 text-center"><div><Map className="mx-auto mb-3 h-14 w-14 text-blue-500" /><p className="font-black">무료 GPS 기반 위치 저장</p><p className="mt-2 text-sm text-slate-500">지도 API 없이도 위도·경도 저장은 가능합니다.</p></div></div></CardContent></Card></div><WeatherCard /></section>}
         {tab === "data" && <section><SectionTitle title="출현 모니터링" desc="시민 기록을 기반으로 계절·지역·수온별 연안 생물 출현 흐름을 확인합니다." /><div className="grid gap-5 md:grid-cols-2"><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">수집 데이터</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 사진 기록, 생물명, 기록일</li><li>• 공개용 권역 위치</li><li>• 비공개 좌표 기반 출현 위치</li><li>• 추후 수온, 염분, 풍속, 파고 연결</li></ul></CardContent></Card><Card className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><p className="mb-3 font-black text-blue-600">운영 원칙</p><ul className="space-y-2 text-sm leading-6 text-slate-600"><li>• 정확한 포인트는 공개하지 않음</li><li>• 금어기·금지체장·보호종 기록 검토</li><li>• 포획량보다 기록 정확도 중심 랭킹</li><li>• 장기적으로 연구·교육 자료화</li><li>• 동정 요청 기록은 검토 대상으로 분류</li><li>• 표준종 연결 기록은 도감·지도 데이터 품질 향상에 활용</li></ul></CardContent></Card></div></section>}
