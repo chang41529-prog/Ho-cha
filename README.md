@@ -39,3 +39,13 @@ Commit changes 후 Vercel이 자동으로 재배포합니다.
 - Google Maps API 없이 OpenStreetMap embed 지도를 사용합니다.
 - 현재 위치 버튼으로 GPS 좌표를 저장하거나 위도/경도를 직접 입력할 수 있습니다.
 - 공개 피드에는 권역명만 표시하고, 정확 좌표는 DB에 저장됩니다.
+
+## 해황·기상 API 환경변수
+Vercel Project Settings > Environment Variables에 아래 값을 Production 환경으로 추가합니다.
+
+- `KHOA_API_KEY`: 국립해양조사원/해양관측 API 인증키
+- `KMA_API_KEY`: 기상청 단기예보 API 인증키
+
+메인 홈의 오늘의 해황 카드와 기록 업로드 시 현재 위치 기준 해황·기상 테스트 카드가 `/api/environment`를 통해 표시됩니다. API 호출 실패 시 사이트가 깨지지 않도록 대체값이 표시됩니다.
+
+데이터 출처 표기: 기상 정보 제공: 기상청 · 해양 정보 제공: 국립해양조사원
