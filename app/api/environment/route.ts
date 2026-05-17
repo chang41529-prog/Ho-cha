@@ -143,11 +143,15 @@ async function fetchKhoa(station: Station) {
   }
 }
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const lat = Number(searchParams.get("lat") || 35.244);
-  const lon = Number(searchParams.get("lon") || 129.222);
-  const station = nearestStation(Number.isFinite(lat) ? lat : 35.244, Number.isFinite(lon) ? lon : 129.222);
+  const rawLat = Number(searchParams.get("lat") || 35.244);
+  const rawLon = Number(searchParams.get("lon") || 129.222);
+  const lat = Number.isFinite(rawLat) && rawLat >= 32 && rawLat <= 39 ? rawLat : 35.244;
+  const lon = Number.isFinite(rawLon) && rawLon >= 124 && rawLon <= 132 ? rawLon : 129.222;
+  const station = nearestStation(lat, lon);
 
   const [kma, khoa] = await Promise.all([fetchKma(lat, lon), fetchKhoa(station)]);
 
@@ -179,5 +183,9 @@ export async function GET(request: Request) {
       weather: kma?.source || "기상청 API 연결 대기/대체값",
     },
     attribution: "기상 정보 제공: 기상청 · 해양 정보 제공: 국립해양조사원",
+  }, {
+    headers: {
+      "Cache-Control": "s-maxage=600, stale-while-revalidate=1800",
+    },
   });
 }
