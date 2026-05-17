@@ -377,7 +377,7 @@ function PostCard({
           </button>
         )}
       </div>
-      <img src={post.img} alt={post.species} className={`${compact ? "h-44" : "h-52"} w-full object-cover`} />
+      <img src={post.img} alt={post.species} className={`${compact ? "h-44" : "h-52"} w-full bg-slate-100 object-contain`} />
       <div className="p-4">
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <h3 className="font-black text-slate-900">{post.species}</h3>
@@ -883,10 +883,8 @@ export default function HoChaWebMVP() {
     if (commentPost?.id === post.id) setCommentPost(null);
   };
 
-  const openComments = async (post: Post) => {
-    setCommentPost(post);
+  const loadComments = async (post: Post) => {
     setComments([]);
-    setCommentText("");
     if (!supabase || post.isSample) return;
     const { data } = await supabase.from("comments").select("*").eq("post_id", post.id).order("created_at", { ascending: true });
     if (data) {
@@ -904,6 +902,12 @@ export default function HoChaWebMVP() {
     }
   };
 
+  const openComments = async (post: Post) => {
+    setCommentPost(post);
+    setCommentText("");
+    await loadComments(post);
+  };
+
   const addComment = async () => {
     if (!supabase || !commentPost || commentPost.isSample) return;
     if (!currentUser) { openAuth("login"); return; }
@@ -917,9 +921,27 @@ export default function HoChaWebMVP() {
     }
   };
 
-  const openPostDetail = (post: Post) => {
+  const addDetailComment = async () => {
+    if (!activePost || activePost.isSample) return;
+    if (!supabase) return;
+    if (!currentUser) { openAuth("login"); return; }
+    if (!commentText.trim()) return;
+    const { error } = await supabase.from("comments").insert({ post_id: activePost.id, user_id: currentUser.id, content: commentText.trim() });
+    if (!error) {
+      setCommentText("");
+      const updatedPost = { ...activePost, comments: activePost.comments + 1 };
+      setPosts((prev) => prev.map((item) => item.id === activePost.id ? { ...item, comments: item.comments + 1 } : item));
+      setSelectedPost(updatedPost);
+      await loadComments(updatedPost);
+    }
+  };
+
+  const openPostDetail = async (post: Post) => {
     const latestPost = posts.find((item) => item.id === post.id) || post;
     setSelectedPost(latestPost);
+    setCommentPost(null);
+    setCommentText("");
+    await loadComments(latestPost);
     setTab("postDetail");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -966,14 +988,43 @@ export default function HoChaWebMVP() {
               <div className="min-w-0 flex-1"><p className="truncate text-base font-black text-slate-900">{activePost.user}</p><p className="truncate text-sm text-slate-500">{activePost.date}{activePost.location ? ` · ${activePost.location}` : ""}</p></div>
               {currentUser?.id === activePost.user_id && !activePost.isSample && <Button onClick={() => deletePost(activePost)} variant="outline" className="rounded-xl border-red-100 bg-red-50 font-bold text-red-600 hover:bg-red-100"><Trash2 className="mr-1 h-4 w-4" />삭제</Button>}
             </div>
-            <img src={activePost.img} alt={activePost.species} className="max-h-[620px] w-full object-cover" />
+            <img src={activePost.img} alt={activePost.species} className="max-h-[720px] w-full bg-slate-100 object-contain" />
             <CardContent className="p-5 md:p-6">
               <div className="mb-3 flex flex-wrap items-center gap-2"><h1 className="text-3xl font-black text-slate-900">{activePost.species}</h1><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-bold text-blue-600">{activePost.tag}</span><span className={`rounded-full px-3 py-1 text-xs font-bold ${getIdentificationStatus(activePost).tone === "emerald" ? "bg-emerald-50 text-emerald-700" : getIdentificationStatus(activePost).tone === "amber" ? "bg-amber-50 text-amber-700" : "bg-slate-100 text-slate-600"}`}>{getIdentificationStatus(activePost).label}</span><span className="rounded-full bg-purple-50 px-3 py-1 text-xs font-bold text-purple-700">품질 {getRecordQuality(activePost).label}</span></div>
               <p className="whitespace-pre-wrap text-base leading-8 text-slate-700">{activePost.caption || "작성된 설명이 없습니다."}</p>
               <div className="mt-4 flex items-center gap-4 border-y border-slate-100 py-4 text-sm text-slate-600"><button onClick={() => toggleLike(activePost)} className={`flex items-center gap-1 font-bold transition ${activePost.likedByMe ? "text-red-500" : "hover:text-red-500"}`}><Heart className={`h-5 w-5 ${activePost.likedByMe ? "fill-current" : ""}`} />좋아요 {activePost.likes}</button><button onClick={() => openComments(activePost)} className="flex items-center gap-1 font-bold hover:text-blue-600"><MessageCircle className="h-5 w-5" />댓글 {activePost.comments}</button></div>
               <ObservationInfoCard post={activePost} />
               <SpeciesRegulationCard post={activePost} />
-              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4"><div className="mb-3 flex items-center justify-between"><p className="font-black text-slate-900">댓글</p><Button onClick={() => openComments(activePost)} variant="outline" className="rounded-xl bg-white font-bold">댓글 보기/작성</Button></div><p className="text-sm leading-6 text-slate-600">댓글은 현재 모달에서 작성·확인됩니다. 이후 답글 기능을 추가할 때 이 상세 페이지 안으로 확장할 수 있습니다.</p></div>
+              <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between">
+                  <p className="font-black text-slate-900">댓글 {activePost.comments}</p>
+                  <p className="text-xs text-slate-500">상세 페이지에서 바로 확인·작성</p>
+                </div>
+                {activePost.isSample ? (
+                  <p className="rounded-xl bg-white p-4 text-sm text-slate-600">샘플 게시글에는 댓글을 저장하지 않습니다. 실제 업로드된 게시글에서 댓글 기능을 테스트할 수 있습니다.</p>
+                ) : (
+                  <>
+                    <div className="max-h-96 space-y-3 overflow-auto rounded-2xl bg-white p-4">
+                      {comments.length === 0 ? <p className="text-sm text-slate-500">아직 댓글이 없습니다. 첫 댓글을 남겨보세요.</p> : comments.map((c) => (
+                        <div key={c.id} className="rounded-xl border border-slate-100 bg-slate-50 p-3 text-sm text-slate-700">
+                          <div className="mb-2 flex items-center gap-2">
+                            <div className="grid h-8 w-8 place-items-center overflow-hidden rounded-full bg-blue-50 text-xs">{c.avatar?.startsWith("http") ? <img src={c.avatar} alt={`${c.user || "사용자"} 프로필`} className="h-full w-full object-cover" /> : c.avatar}</div>
+                            <div>
+                              <p className="text-xs font-black text-slate-800">{c.user || "Ho-cha 사용자"}</p>
+                              <p className="text-[11px] text-slate-400">{formatDate(c.created_at)}</p>
+                            </div>
+                          </div>
+                          <p className="whitespace-pre-wrap leading-6">{c.content}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex gap-2">
+                      <Input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder={currentUser ? "댓글을 입력하세요" : "로그인 후 댓글을 작성할 수 있습니다"} className="rounded-xl border-slate-200 bg-white" />
+                      <Button onClick={addDetailComment} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">등록</Button>
+                    </div>
+                  </>
+                )}
+              </div>
             </CardContent>
           </Card>
         </section>}
