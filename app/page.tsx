@@ -186,6 +186,34 @@ type Comment = {
   avatar?: string;
 };
 
+type IdentificationSuggestion = {
+  id: string;
+  post_id: string;
+  user_id?: string;
+  suggested_species_name: string;
+  memo?: string | null;
+  is_selected?: boolean;
+  agreement_count?: number;
+  created_at?: string;
+  user?: string;
+  avatar?: string;
+};
+
+type MonthlyRanking = {
+  user_id: string;
+  nickname: string;
+  avatar_url?: string | null;
+  month_key: string;
+  total_points: number;
+  post_points: number;
+  identification_points: number;
+  diversity_points: number;
+  post_count: number;
+  species_count: number;
+  suggestion_count: number;
+  selected_suggestion_count: number;
+};
+
 type LocationState = {
   latitude: number | null;
   longitude: number | null;
@@ -501,6 +529,12 @@ export default function HoChaWebMVP() {
   const [environmentLoading, setEnvironmentLoading] = useState(false);
   const [uploadEnvironment, setUploadEnvironment] = useState<EnvironmentalData | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [identificationSuggestions, setIdentificationSuggestions] = useState<IdentificationSuggestion[]>([]);
+  const [suggestedSpecies, setSuggestedSpecies] = useState("");
+  const [suggestionMemo, setSuggestionMemo] = useState("");
+  const [identificationMessage, setIdentificationMessage] = useState("");
+  const [monthlyRankings, setMonthlyRankings] = useState<MonthlyRanking[]>([]);
+  const [rankingLoading, setRankingLoading] = useState(false);
 
   const currentUserPosts = useMemo(() => posts.filter((post) => !post.isSample && post.user_id === currentUser?.id), [posts, currentUser]);
   const mySpeciesCount = useMemo(() => new Set(currentUserPosts.map((post) => post.species.trim()).filter(Boolean)).size, [currentUserPosts]);
@@ -609,6 +643,47 @@ export default function HoChaWebMVP() {
     if (!selectedPost) return null;
     return posts.find((post) => post.id === selectedPost.id) || selectedPost;
   }, [selectedPost, posts]);
+
+  const currentMonthKey = useMemo(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  }, []);
+
+  const fallbackMonthlyRankings = useMemo(() => {
+    const userMap = new globalThis.Map<string, MonthlyRanking>();
+    realPosts.forEach((post) => {
+      const userId = post.user_id || post.user;
+      const prev = userMap.get(userId) || {
+        user_id: userId,
+        nickname: post.user || "Ho-cha 사용자",
+        avatar_url: post.avatar?.startsWith("http") ? post.avatar : null,
+        month_key: currentMonthKey,
+        total_points: 0,
+        post_points: 0,
+        identification_points: 0,
+        diversity_points: 0,
+        post_count: 0,
+        species_count: 0,
+        suggestion_count: 0,
+        selected_suggestion_count: 0,
+      };
+      let postPoint = 5;
+      if (post.img) postPoint += 2;
+      if (post.latitude && post.longitude) postPoint += 3;
+      if (post.temp || post.wave) postPoint += 2;
+      if (post.caption && post.caption.length >= 20) postPoint += 2;
+      prev.post_count += 1;
+      prev.post_points += postPoint;
+      userMap.set(userId, prev);
+    });
+    userMap.forEach((item, userId) => {
+      const species = new Set(realPosts.filter((post) => (post.user_id || post.user) === userId).map((post) => getSpeciesMeta(post.species)?.standardName || post.species).filter(Boolean));
+      item.species_count = species.size;
+      item.diversity_points = species.size * 20;
+      item.total_points = item.post_points + item.diversity_points + item.identification_points;
+    });
+    return Array.from(userMap.values()).sort((a, b) => b.total_points - a.total_points).slice(0, 10);
+  }, [realPosts, currentMonthKey]);
 
   const userLevel = useMemo(() => {
     const score = currentUserPosts.length * 10 + mySpeciesCount * 15 + myLocationCount * 8 + myVerifiedSpeciesCount * 12;
@@ -948,6 +1023,90 @@ export default function HoChaWebMVP() {
     if (commentPost?.id === post.id) setCommentPost(null);
   };
 
+  const loadMonthlyRankings = async () => {
+    if (!supabase) return;
+    setRankingLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("monthly_ho_point_rankings")
+        .select("*")
+        .eq("month_key", currentMonthKey)
+        .order("total_points", { ascending: false })
+        .limit(10);
+      if (!error && data) setMonthlyRankings(data as MonthlyRanking[]);
+    } finally {
+      setRankingLoading(false);
+    }
+  };
+
+  const loadIdentificationSuggestions = async (post: Post) => {
+    setIdentificationSuggestions([]);
+    setIdentificationMessage("");
+    if (!supabase || post.isSample) return;
+    const { data, error } = await supabase
+      .from("identification_suggestions")
+      .select("id,post_id,user_id,suggested_species_name,memo,is_selected,created_at")
+      .eq("post_id", post.id)
+      .order("is_selected", { ascending: false })
+      .order("created_at", { ascending: true });
+    if (error || !data) return;
+    const suggestionIds = data.map((row: any) => row.id);
+    const userIds = Array.from(new Set(data.map((row: any) => row.user_id).filter(Boolean)));
+    const [votesResult, profilesResult] = await Promise.all([
+      suggestionIds.length ? supabase.from("identification_votes").select("suggestion_id").in("suggestion_id", suggestionIds) : Promise.resolve({ data: [] as any[] }),
+      userIds.length ? supabase.from("profiles").select("id,nickname,avatar_url").in("id", userIds as string[]) : Promise.resolve({ data: [] as any[] }),
+    ]);
+    const voteCounts: Record<string, number> = {};
+    (votesResult.data || []).forEach((vote: any) => { voteCounts[vote.suggestion_id] = (voteCounts[vote.suggestion_id] || 0) + 1; });
+    const profileMap: Record<string, any> = {};
+    (profilesResult.data || []).forEach((profile: any) => { profileMap[profile.id] = profile; });
+    setIdentificationSuggestions(data.map((row: any) => ({
+      ...row,
+      agreement_count: voteCounts[row.id] || 0,
+      user: profileMap[row.user_id]?.nickname || "Ho-cha 사용자",
+      avatar: profileMap[row.user_id]?.avatar_url || "🔎",
+    })));
+  };
+
+  const addIdentificationSuggestion = async () => {
+    if (!supabase || !activePost || activePost.isSample) return;
+    if (!currentUser) { openAuth("login"); return; }
+    if (!suggestedSpecies.trim()) { setIdentificationMessage("후보 생물명을 입력해주세요."); return; }
+    const { error } = await supabase.from("identification_suggestions").insert({
+      post_id: activePost.id,
+      user_id: currentUser.id,
+      suggested_species_name: suggestedSpecies.trim(),
+      memo: suggestionMemo.trim(),
+    });
+    if (error) { setIdentificationMessage("동정 후보 등록에 실패했습니다. SQL 적용 여부를 확인해주세요."); return; }
+    setSuggestedSpecies("");
+    setSuggestionMemo("");
+    setIdentificationMessage("동정 후보가 등록되었습니다.");
+    await loadIdentificationSuggestions(activePost);
+    await loadMonthlyRankings();
+  };
+
+  const agreeIdentificationSuggestion = async (suggestion: IdentificationSuggestion) => {
+    if (!supabase || !currentUser) { openAuth("login"); return; }
+    const { error } = await supabase.from("identification_votes").insert({ suggestion_id: suggestion.id, user_id: currentUser.id });
+    if (error) { setIdentificationMessage("이미 동의했거나 처리 중 오류가 발생했습니다."); return; }
+    setIdentificationMessage("후보 동의가 반영되었습니다.");
+    if (activePost) await loadIdentificationSuggestions(activePost);
+    await loadMonthlyRankings();
+  };
+
+  const selectIdentificationSuggestion = async (suggestion: IdentificationSuggestion) => {
+    if (!supabase || !activePost || !currentUser) return;
+    if (activePost.user_id !== currentUser.id) { setIdentificationMessage("게시글 작성자만 최종 동정을 선택할 수 있습니다."); return; }
+    await supabase.from("identification_suggestions").update({ is_selected: false }).eq("post_id", activePost.id);
+    const { error } = await supabase.from("identification_suggestions").update({ is_selected: true }).eq("id", suggestion.id);
+    if (!error) {
+      setIdentificationMessage("최종 동정 후보가 선택되었습니다.");
+      await loadIdentificationSuggestions(activePost);
+      await loadMonthlyRankings();
+    }
+  };
+
   const loadComments = async (post: Post) => {
     setComments([]);
     if (!supabase || post.isSample) return;
@@ -1007,6 +1166,7 @@ export default function HoChaWebMVP() {
     setCommentPost(null);
     setCommentText("");
     await loadComments(latestPost);
+    await loadIdentificationSuggestions(latestPost);
     setTab("postDetail");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -1014,6 +1174,10 @@ export default function HoChaWebMVP() {
   useEffect(() => {
     fetchEnvironment(null, null, "home");
   }, []);
+
+  useEffect(() => {
+    loadMonthlyRankings();
+  }, [currentMonthKey, currentUser?.id]);
 
   const goToTab = (nextTab: string) => {
     setTab(nextTab);
@@ -1064,6 +1228,7 @@ export default function HoChaWebMVP() {
               <div className="mt-4 flex items-center gap-4 border-y border-slate-100 py-4 text-sm text-slate-600"><button onClick={() => toggleLike(activePost)} className={`flex items-center gap-1 font-bold transition ${activePost.likedByMe ? "text-red-500" : "hover:text-red-500"}`}><Heart className={`h-5 w-5 ${activePost.likedByMe ? "fill-current" : ""}`} />좋아요 {activePost.likes}</button><button onClick={() => openComments(activePost)} className="flex items-center gap-1 font-bold hover:text-blue-600"><MessageCircle className="h-5 w-5" />댓글 {activePost.comments}</button></div>
               <ObservationInfoCard post={activePost} />
               <SpeciesRegulationCard post={activePost} />
+              <Card className="mt-4 rounded-2xl border-blue-100 bg-blue-50/50 shadow-sm"><CardContent className="p-4"><div className="flex items-center justify-between gap-3"><div><p className="font-black text-slate-900">동정 후보</p><p className="mt-1 text-xs leading-5 text-slate-500">후보 종을 제안하고 근거가 좋은 제안에 동의할 수 있습니다. 최종 선택은 게시글 작성자가 합니다.</p></div><HelpCircle className="h-6 w-6 text-blue-600" /></div><div className="mt-4 space-y-3">{identificationSuggestions.length === 0 ? <p className="rounded-xl bg-white p-3 text-sm text-slate-500">아직 등록된 동정 후보가 없습니다.</p> : identificationSuggestions.map((suggestion) => <div key={suggestion.id} className={`rounded-2xl border p-3 ${suggestion.is_selected ? "border-emerald-200 bg-emerald-50" : "border-slate-200 bg-white"}`}><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-black text-slate-900">{suggestion.suggested_species_name} {suggestion.is_selected && <span className="ml-2 rounded-full bg-emerald-100 px-2 py-1 text-xs text-emerald-700">최종 선택</span>}</p><p className="mt-1 text-xs text-slate-500">제안자 {suggestion.user} · 동의 {suggestion.agreement_count || 0}명</p></div><div className="flex gap-2"><Button onClick={() => agreeIdentificationSuggestion(suggestion)} variant="outline" size="sm" className="rounded-xl bg-white">동의</Button>{activePost.user_id === currentUser?.id && <Button onClick={() => selectIdentificationSuggestion(suggestion)} size="sm" className="rounded-xl bg-blue-600">최종 선택</Button>}</div></div>{suggestion.memo && <p className="mt-2 rounded-xl bg-white/70 p-2 text-xs leading-5 text-slate-600">근거: {suggestion.memo}</p>}</div>)}</div>{currentUser ? <div className="mt-4 grid gap-2 rounded-2xl bg-white p-3"><Input value={suggestedSpecies} onChange={(e) => setSuggestedSpecies(e.target.value)} placeholder="후보 생물명 예: 조피볼락" className="rounded-xl bg-slate-50" /><Input value={suggestionMemo} onChange={(e) => setSuggestionMemo(e.target.value)} placeholder="근거 메모 예: 등지느러미와 체형이 유사함" className="rounded-xl bg-slate-50" /><Button onClick={addIdentificationSuggestion} className="rounded-xl bg-blue-600 font-bold">동정 후보 등록</Button></div> : <Button onClick={() => openAuth("login")} className="mt-4 rounded-xl bg-blue-600 font-bold">로그인하고 동정 참여</Button>}{identificationMessage && <p className="mt-3 rounded-xl bg-white p-3 text-sm text-slate-600">{identificationMessage}</p>}</CardContent></Card>
               <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
                 <div className="mb-3 flex items-center justify-between">
                   <p className="font-black text-slate-900">댓글 {activePost.comments}</p>
@@ -1110,7 +1275,7 @@ export default function HoChaWebMVP() {
 
         {tab === "profile" && <section>{!currentUser ? <div className="mx-auto max-w-xl rounded-3xl border border-slate-200 bg-white p-8 text-center shadow-sm"><User className="mx-auto mb-4 h-12 w-12 text-blue-500" /><h2 className="text-2xl font-black">로그인이 필요합니다</h2><p className="mt-2 text-sm leading-6 text-slate-500">내 게시글, 도감 현황, 활동 기록을 보려면 로그인해주세요.</p><Button onClick={() => openAuth("login")} className="mt-5 rounded-xl bg-blue-600 font-bold">로그인하기</Button></div> : <><SectionTitle title="내 프로필" desc="내가 올린 기록과 도감 현황을 한눈에 확인합니다." /><div className="grid gap-5 lg:grid-cols-[340px_1fr]"><aside className="space-y-5"><Card className="overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm"><div className="h-24 bg-gradient-to-r from-blue-500 via-cyan-400 to-emerald-300" /><CardContent className="p-6"><div className="-mt-14 flex items-end gap-4"><div className="grid h-20 w-20 place-items-center overflow-hidden rounded-full border-4 border-white bg-blue-50 text-4xl shadow-sm">{profileForm.avatar_url ? <img loading="lazy" src={profileForm.avatar_url} alt="프로필 이미지" className="h-full w-full object-cover" /> : "🐟"}</div><div className="pb-1"><p className="text-xl font-black">{profileForm.nickname || currentUser.email?.split("@")[0]}</p><p className="text-sm text-slate-500">{currentUser.email}</p></div></div>{profileForm.bio && <p className="mt-4 rounded-2xl bg-slate-50 p-3 text-sm leading-6 text-slate-700">{profileForm.bio}</p>}<div className="mt-4 flex flex-wrap gap-2">{profileForm.favorite_group && <span className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">관심 생물군: {profileForm.favorite_group}</span>}{profileForm.featured_badge && <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-bold text-amber-700">대표 배지: {profileForm.featured_badge}</span>}</div><div className="mt-6 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">내 기록</p><p className="mt-1 text-2xl font-black text-blue-600">{currentUserPosts.length}</p></div><div className="rounded-2xl bg-slate-50 p-4"><p className="text-xs text-slate-500">기록 생물</p><p className="mt-1 text-2xl font-black text-blue-600">{mySpeciesCount}</p></div></div><Button onClick={() => goToTab("upload")} className="mt-5 w-full rounded-xl bg-blue-600 font-bold">새 기록 올리기</Button></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">프로필 꾸미기</h3></div><div className="mt-4 grid gap-3"><Input value={profileForm.nickname} onChange={(e) => setProfileForm({ ...profileForm, nickname: e.target.value })} placeholder="닉네임" className="rounded-xl border-slate-200 bg-slate-50" /><Input value={profileForm.bio} onChange={(e) => setProfileForm({ ...profileForm, bio: e.target.value })} placeholder="한 줄 자기소개" className="rounded-xl border-slate-200 bg-slate-50" /><label className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50 p-4 text-center transition hover:border-blue-300 hover:bg-blue-50"><input type="file" accept="image/*" className="hidden" onChange={(e) => { const file = e.target.files?.[0]; if (file) { setAvatarFile(file); setProfileMessage("프로필 저장을 누르면 새 이미지가 적용됩니다."); } }} /><div className="mx-auto mb-2 grid h-14 w-14 place-items-center overflow-hidden rounded-full bg-white text-2xl shadow-sm">{profileForm.avatar_url ? <img loading="lazy" src={profileForm.avatar_url} alt="현재 프로필 이미지" className="h-full w-full object-cover" /> : "🐟"}</div><p className="text-sm font-black text-slate-800">프로필 사진 업로드</p><p className="mt-1 text-xs text-slate-500">{avatarFile ? avatarFile.name : "클릭해서 사진을 선택하세요"}</p></label><select value={profileForm.favorite_group} onChange={(e) => setProfileForm({ ...profileForm, favorite_group: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"><option value="">관심 생물군 선택</option><option value="물고기">물고기</option><option value="갑각류">갑각류</option><option value="패류">패류</option><option value="두족류">두족류</option><option value="기타 연안생물">기타 연안생물</option></select><select value={profileForm.featured_badge} onChange={(e) => setProfileForm({ ...profileForm, featured_badge: e.target.value })} className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700"><option value="">대표 배지 선택</option>{myBadges.map((badge) => <option key={badge} value={badge}>{badge}</option>)}</select><Button onClick={saveProfile} disabled={savingProfile} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">{savingProfile ? "저장 중..." : "프로필 저장"}</Button>{profileMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{profileMessage}</p>}</div></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><div className="flex items-center gap-2"><Sparkles className="h-5 w-5 text-blue-600" /><h3 className="font-black">내 레벨</h3></div><p className="mt-3 text-2xl font-black text-slate-900">{userLevel.name}</p><p className="mt-1 text-sm text-slate-500">활동 점수 {userLevel.score}점 · 다음 단계: {userLevel.next}</p><div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-blue-600" style={{ width: `${userLevel.progress}%` }} /></div><p className="mt-3 text-xs leading-5 text-slate-500">기록 수, 종 다양성, 위치 기록, 표준종 연결을 바탕으로 계산됩니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">내 배지</h3>{myBadges.length === 0 ? <p className="mt-2 text-sm leading-6 text-slate-600">첫 기록을 올리면 배지가 표시됩니다.</p> : <div className="mt-3 flex flex-wrap gap-2">{myBadges.map((badge) => <span key={badge} className="rounded-full bg-blue-50 px-3 py-1 text-sm font-bold text-blue-700">{badge}</span>)}</div>}<p className="mt-3 text-xs leading-5 text-slate-500">배지는 포획량보다 기록 다양성, 위치 기록, 동정 참여를 중심으로 확장할 예정입니다.</p></CardContent></Card><Card className="rounded-3xl border-slate-200 bg-white shadow-sm"><CardContent className="p-6"><h3 className="font-black">위치 기록 안내</h3><p className="mt-2 text-sm leading-6 text-slate-600">현재 버전은 무료 브라우저 GPS와 OpenStreetMap 미리보기를 사용합니다. Google 지도 비용 없이 위도·경도를 DB에 저장하고, 피드에는 사용자가 입력한 권역명만 보여줍니다.</p></CardContent></Card></aside><div><SectionTitle title="개인 도감" desc="내가 직접 기록한 생물 컬렉션입니다." />{personalDogam.length === 0 ? <div className="mb-6 rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center"><BookOpen className="mx-auto mb-3 h-10 w-10 text-slate-400" /><p className="font-black">아직 개인 도감이 비어 있습니다</p><p className="mt-2 text-sm text-slate-500">기록을 올리면 생물별 카드가 자동으로 만들어집니다.</p></div> : <div className="mb-8 grid gap-4 md:grid-cols-2">{personalDogam.map((item) => <Card key={item.name} className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm"><img loading="lazy" src={item.representativeImage} alt={item.name} className="h-32 w-full object-cover" /><CardContent className="p-4"><div className="flex flex-wrap items-center gap-2"><p className="text-lg font-black text-slate-900">{item.name}</p>{item.meta && <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {item.meta.rarity}</span>}</div><p className="mt-2 text-sm text-slate-500">총 기록 {item.count}건 · 최근 {item.latestLocation || "지역 미입력"}</p><p className="mt-1 text-xs text-slate-400">첫 기록 {item.firstDate} · 최근 기록 {item.latestDate}</p>{item.meta && <p className="mt-2 text-xs italic text-slate-500">{item.meta.scientificName}</p>}</CardContent></Card>)}</div>}<SectionTitle title="내 게시글" desc="내 계정으로 올린 기록만 모아봅니다." />{currentUserPosts.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Camera className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 올린 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 이곳에 표시됩니다.</p><Button onClick={() => goToTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">첫 기록 올리기</Button></div> : <div className="grid gap-5 md:grid-cols-2">{currentUserPosts.map((post) => <PostCard key={post.id} post={post} currentUserId={currentUser?.id} onComments={openComments} onLike={toggleLike} onDelete={deletePost} onOpen={openPostDetail} />)}</div>}</div></div></>}</section>}
 
-        {tab === "rank" && <section><SectionTitle title="월간 Ho-cha 랭킹" desc="종 다양성, 정확한 기록, 방류 인증을 중심으로 점수를 부여합니다." /><div className="grid gap-4 md:grid-cols-2">{rankings.map((item) => <Card key={item.rank} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="flex items-center justify-between p-5"><div className="flex items-center gap-4"><div className="grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-xl font-black text-blue-600">{item.rank}</div><div><p className="font-black">{item.avatar} {item.name}</p><p className="text-sm text-slate-500">기록 {item.score}</p></div></div><p className="text-lg font-black text-blue-600">{item.points} pt</p></CardContent></Card>)}</div></section>}
+        {tab === "rank" && <section><SectionTitle title="이달의 Ho-point 랭킹" desc="많이 잡기 경쟁이 아니라 기록 품질, 종 다양성, 위치·환경 기록, 동정 기여를 중심으로 계산합니다." /><div className="mb-5 grid gap-4 md:grid-cols-4"><Card className="rounded-2xl border-blue-200 bg-blue-50 shadow-sm"><CardContent className="p-5"><p className="text-sm font-bold text-blue-700">집계 월</p><p className="mt-1 text-2xl font-black text-slate-900">{currentMonthKey}</p></CardContent></Card><Card className="rounded-2xl border-emerald-200 bg-emerald-50 shadow-sm"><CardContent className="p-5"><p className="text-sm font-bold text-emerald-700">기록 품질</p><p className="mt-1 text-sm leading-6 text-slate-700">사진·위치·환경·설명 포함</p></CardContent></Card><Card className="rounded-2xl border-purple-200 bg-purple-50 shadow-sm"><CardContent className="p-5"><p className="text-sm font-bold text-purple-700">종 다양성</p><p className="mt-1 text-sm leading-6 text-slate-700">같은 종 반복보다 다양한 기록 우대</p></CardContent></Card><Card className="rounded-2xl border-amber-200 bg-amber-50 shadow-sm"><CardContent className="p-5"><p className="text-sm font-bold text-amber-700">동정 기여</p><p className="mt-1 text-sm leading-6 text-slate-700">후보 제안·동의·최종 선택 반영</p></CardContent></Card></div><div className="space-y-3">{rankingLoading && <p className="rounded-2xl bg-white p-4 text-sm text-slate-500">랭킹을 불러오는 중입니다.</p>}{(monthlyRankings.length ? monthlyRankings : fallbackMonthlyRankings).length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><Trophy className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 이달의 랭킹 데이터가 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록과 동정 참여가 생기면 이곳에 표시됩니다.</p></div> : (monthlyRankings.length ? monthlyRankings : fallbackMonthlyRankings).map((item, index) => <Card key={item.user_id} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="grid gap-4 p-5 md:grid-cols-[80px_1fr_160px]"><div className="flex items-center gap-3"><div className="grid h-14 w-14 place-items-center rounded-2xl bg-blue-50 text-2xl font-black text-blue-600">{index + 1}</div></div><div><div className="flex flex-wrap items-center gap-2"><div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-slate-100 text-lg">{item.avatar_url ? <img loading="lazy" src={item.avatar_url} alt={item.nickname} className="h-full w-full object-cover" /> : "🐟"}</div><p className="font-black text-slate-900">{item.nickname}</p></div><div className="mt-3 grid gap-2 text-xs text-slate-600 md:grid-cols-4"><span className="rounded-full bg-blue-50 px-3 py-1 font-bold text-blue-700">기록 {item.post_count}건</span><span className="rounded-full bg-purple-50 px-3 py-1 font-bold text-purple-700">{item.species_count}종</span><span className="rounded-full bg-amber-50 px-3 py-1 font-bold text-amber-700">동정 {item.suggestion_count}회</span><span className="rounded-full bg-emerald-50 px-3 py-1 font-bold text-emerald-700">채택 {item.selected_suggestion_count}회</span></div></div><div className="text-left md:text-right"><p className="text-2xl font-black text-blue-600">{item.total_points} pt</p><p className="mt-1 text-xs leading-5 text-slate-500">기록 {item.post_points} · 다양성 {item.diversity_points} · 동정 {item.identification_points}</p></div></CardContent></Card>)}</div><Card className="mt-5 rounded-2xl border-slate-200 bg-slate-50 shadow-sm"><CardContent className="p-5"><p className="font-black text-slate-800">Ho-point 기준</p><p className="mt-2 text-sm leading-6 text-slate-600">게시글 기본 5점, 사진 2점, GPS 좌표 3점, 환경정보 2점, 20자 이상 설명 2점, 이달 첫 기록 종 20점, 동정 후보 제안 3점, 최종 채택 25점을 기본 기준으로 합니다. 운영 방향은 포획량보다 기록 품질과 생물 다양성입니다.</p></CardContent></Card></section>}
         {tab === "info" && <section><SectionTitle title="생물 정보와 안전 가이드" desc="보호종, 금어기, 금지체장, 제철 정보, 유해·주의 생물 정보를 한곳에서 확인합니다." /><MonthlyInfoCards month={new Date().getMonth() + 1} /><div className="mt-6 grid gap-4 md:grid-cols-2 lg:grid-cols-3">{speciesCatalog.map((sp) => { const info = getSpeciesInfo(sp.standardName); return <Card key={sp.standardName} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-3 flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-blue-50 text-blue-600">{sp.category === "shell" ? <Shell className="h-5 w-5" /> : <Fish className="h-5 w-5" />}</div><div><p className="font-black text-slate-900">{sp.standardName}</p><p className="text-xs italic text-slate-500">{sp.scientificName}</p></div></div><div className="mb-3 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{sp.group}</span><span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">앱 희귀도 {sp.rarity}</span></div><div className="space-y-2 text-sm leading-6 text-slate-600"><p><span className="font-black text-slate-800">보호종</span> · {info.protectedStatus}</p><p><span className="font-black text-slate-800">금어기</span> · {info.closedSeason}</p><p><span className="font-black text-slate-800">금지체장</span> · {info.minSize}</p><p><span className="font-black text-slate-800">제철/시즌</span> · {info.seasonal}</p><p className="rounded-xl bg-slate-50 p-3 text-xs leading-5"><span className="font-black">주의</span> · {info.caution}</p></div></CardContent></Card>; })}</div><Card className="mt-6 rounded-2xl border-amber-200 bg-amber-50 shadow-sm"><CardContent className="p-5"><p className="font-black text-amber-800">운영 기준</p><p className="mt-2 text-sm leading-6 text-slate-700">현재 포함된 생물 정보는 기능 확인용 기본 데이터입니다. 실제 서비스 운영 전에는 해양수산부 금어기·금지체장 기준, 국립수산과학원 자료, 해양보호생물 지정현황을 기준으로 species_master 데이터를 검수해야 합니다.</p></CardContent></Card></section>}
 
         {tab === "book" && <section><SectionTitle title="연안 도감" desc="실제 업로드 기록을 기준으로 자동 집계합니다. 표준종 연결 기록과 동정 요청 기록을 구분합니다." />{dogamItems.length === 0 ? <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-10 text-center"><BookOpen className="mx-auto mb-3 h-12 w-12 text-slate-400" /><p className="font-black">아직 실제 도감 기록이 없습니다</p><p className="mt-2 text-sm text-slate-500">첫 기록을 올리면 도감이 자동으로 채워집니다.</p><Button onClick={() => goToTab("upload")} className="mt-5 rounded-xl bg-blue-600 font-bold">기록 올리기</Button></div> : <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">{dogamItems.map((item) => { const meta = item.meta; const statusLabel = meta ? "표준종 연결" : item.requestCount > 0 ? "동정 요청 포함" : "미확인"; return <Card key={item.name} className="rounded-2xl border-slate-200 bg-white shadow-sm"><CardContent className="p-5"><div className="mb-4 grid h-12 w-12 place-items-center rounded-2xl bg-blue-50 text-blue-600">{meta?.category === "shell" ? <Shell className="h-6 w-6" /> : <Fish className="h-6 w-6" />}</div><p className="text-lg font-black">{item.name}</p><p className="mt-1 text-sm text-slate-500">기록 {item.count}건 · 지역 {item.locations.size}곳</p><div className="mt-3 flex flex-wrap gap-2"><span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-bold text-blue-600">{meta?.group || "사용자 입력"}</span><span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">{statusLabel}</span>{meta && <span className="rounded-full bg-purple-50 px-2 py-1 text-xs font-bold text-purple-700">희귀도 {meta.rarity}</span>}</div>{meta && <p className="mt-3 text-xs italic text-slate-500">{meta.scientificName}</p>}<p className="mt-2 text-sm leading-6 text-slate-600">{meta?.note || "표준종 후보와 연결되지 않은 기록입니다. 이후 동정 검토 기능으로 정리할 수 있습니다."}</p></CardContent></Card>; })}</div>}</section>}
