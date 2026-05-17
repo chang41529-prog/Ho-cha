@@ -182,6 +182,8 @@ type Comment = {
   content: string;
   created_at: string;
   user_id?: string;
+  user?: string;
+  avatar?: string;
 };
 
 type LocationState = {
@@ -247,10 +249,13 @@ function CoordinateMap({ latitude, longitude }: { latitude: number | null; longi
 
 function mapDbPost(row: any): Post {
   const category = row.category || "fish";
+  const profile = row.profile || row.profiles || {};
+  const defaultAvatar = category === "shell" ? "🐚" : category === "crab" ? "🦀" : "🐟";
+
   return {
     id: row.id,
     user_id: row.user_id,
-    user: "Ho-cha 사용자",
+    user: profile.nickname || row.user || "Ho-cha 사용자",
     species: row.species_name || "미동정 생물",
     group: category,
     location: row.region || "지역 미입력",
@@ -264,7 +269,7 @@ function mapDbPost(row: any): Post {
     img: row.image_url || "https://images.unsplash.com/photo-1500375592092-40eb2168fd21?auto=format&fit=crop&w=900&q=80",
     tag: category === "shell" ? "패류" : category === "crab" ? "갑각류" : "물고기",
     date: formatDate(row.created_at),
-    avatar: category === "shell" ? "🐚" : category === "crab" ? "🦀" : "🐟",
+    avatar: profile.avatar_url || row.avatar || defaultAvatar,
     likedByMe: row.liked_by_me ?? false,
   };
 }
@@ -357,7 +362,9 @@ function PostCard({
   return (
     <motion.article initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md">
       <div className="flex items-center gap-3 p-4">
-        <div className="grid h-9 w-9 place-items-center rounded-full bg-blue-50 text-lg">{post.avatar}</div>
+        <div className="grid h-9 w-9 place-items-center overflow-hidden rounded-full bg-blue-50 text-lg">
+          {post.avatar?.startsWith("http") ? <img src={post.avatar} alt={`${post.user} 프로필`} className="h-full w-full object-cover" /> : post.avatar}
+        </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-bold text-slate-900">{post.user}</p>
           <p className="truncate text-xs text-slate-500">{post.date}{post.location ? ` · ${post.location}` : ""}</p>
@@ -629,7 +636,8 @@ export default function HoChaWebMVP() {
 
       setProfileForm((prev) => ({ ...prev, avatar_url: avatarUrl }));
       setAvatarFile(null);
-      setProfileMessage("프로필이 저장되었습니다.");
+      setProfileMessage("프로필이 저장되었습니다. 피드에도 새 닉네임과 프로필 사진이 반영됩니다.");
+      await fetchPosts();
     } catch (error) {
       console.error(error);
       setProfileMessage("저장 실패: 이미지 업로드 권한 또는 profiles 컬럼 추가 SQL을 확인해주세요.");
@@ -643,10 +651,18 @@ export default function HoChaWebMVP() {
     const { data, error } = await supabase.from("posts").select("*").order("created_at", { ascending: false });
     if (!error && data) {
       const postIds = data.map((row: any) => row.id);
-      const [commentsResult, likesResult] = await Promise.all([
+      const userIds = Array.from(new Set(data.map((row: any) => row.user_id).filter(Boolean)));
+
+      const [commentsResult, likesResult, profilesResult] = await Promise.all([
         postIds.length ? supabase.from("comments").select("post_id").in("post_id", postIds) : Promise.resolve({ data: [] as any[] }),
         postIds.length ? supabase.from("likes").select("post_id,user_id").in("post_id", postIds) : Promise.resolve({ data: [] as any[] }),
+        userIds.length ? supabase.from("profiles").select("id,nickname,avatar_url").in("id", userIds as string[]) : Promise.resolve({ data: [] as any[] }),
       ]);
+
+      const profileMap: Record<string, any> = {};
+      (profilesResult.data || []).forEach((profile: any) => {
+        profileMap[profile.id] = profile;
+      });
 
       const commentCounts: Record<string, number> = {};
       (commentsResult.data || []).forEach((item: any) => {
@@ -662,6 +678,7 @@ export default function HoChaWebMVP() {
 
       const mapped = data.map((row: any) => mapDbPost({
         ...row,
+        profile: profileMap[row.user_id] || null,
         likes_count: likeCounts[row.id] || 0,
         comments_count: commentCounts[row.id] || 0,
         liked_by_me: likedByMe.has(row.id),
@@ -864,7 +881,19 @@ export default function HoChaWebMVP() {
     setCommentText("");
     if (!supabase || post.isSample) return;
     const { data } = await supabase.from("comments").select("*").eq("post_id", post.id).order("created_at", { ascending: true });
-    if (data) setComments(data);
+    if (data) {
+      const userIds = Array.from(new Set(data.map((row: any) => row.user_id).filter(Boolean)));
+      const { data: profiles } = userIds.length
+        ? await supabase.from("profiles").select("id,nickname,avatar_url").in("id", userIds as string[])
+        : { data: [] as any[] };
+      const profileMap: Record<string, any> = {};
+      (profiles || []).forEach((profile: any) => { profileMap[profile.id] = profile; });
+      setComments(data.map((comment: any) => ({
+        ...comment,
+        user: profileMap[comment.user_id]?.nickname || "Ho-cha 사용자",
+        avatar: profileMap[comment.user_id]?.avatar_url || "💬",
+      })));
+    }
   };
 
   const addComment = async () => {
@@ -929,7 +958,7 @@ export default function HoChaWebMVP() {
 
       {authOpen && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-900/60 px-4 backdrop-blur-sm"><div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><h2 className="text-2xl font-black text-slate-900">{authMode === "login" ? "로그인" : "회원가입"}</h2><p className="mt-2 text-sm leading-6 text-slate-500">Ho-cha 기록을 올리고 댓글을 남기려면 계정이 필요합니다.</p></div><button onClick={() => setAuthOpen(false)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div><div className="grid gap-3">{authMode === "signup" && <Input value={nickname} onChange={(e) => setNickname(e.target.value)} placeholder="닉네임" className="rounded-xl border-slate-200 bg-slate-50" />}<Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" className="rounded-xl border-slate-200 bg-slate-50" /><Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="비밀번호 6자 이상" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={handleAuth} className="rounded-xl bg-blue-600 py-6 font-black hover:bg-blue-700">{authMode === "login" ? "로그인하기" : "회원가입하기"}</Button>{authMessage && <p className="rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{authMessage}</p>}<button onClick={() => { setAuthMode(authMode === "login" ? "signup" : "login"); setAuthMessage(""); }} className="text-sm font-bold text-blue-600">{authMode === "login" ? "처음 오셨나요? 회원가입" : "이미 계정이 있나요? 로그인"}</button></div></div></div>}
 
-      {commentPost && <div className="fixed inset-0 z-[90] grid place-items-center bg-slate-900/50 px-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-4 flex items-start justify-between"><div><h2 className="text-2xl font-black">댓글</h2><p className="mt-1 text-sm text-slate-500">{commentPost.species} · {commentPost.location}</p></div><button onClick={() => setCommentPost(null)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>{commentPost.isSample ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">샘플 게시글에는 댓글을 저장하지 않습니다. 실제 업로드된 게시글에서 댓글 기능을 테스트할 수 있습니다.</p> : <><div className="max-h-72 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{comments.length === 0 ? <p className="text-sm text-slate-500">아직 댓글이 없습니다.</p> : comments.map((c) => <div key={c.id} className="rounded-xl bg-white p-3 text-sm text-slate-700"><p>{c.content}</p><p className="mt-1 text-xs text-slate-400">{formatDate(c.created_at)}</p></div>)}</div><div className="mt-4 flex gap-2"><Input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="댓글을 입력하세요" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={addComment} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">등록</Button></div></>}</div></div>}
+      {commentPost && <div className="fixed inset-0 z-[90] grid place-items-center bg-slate-900/50 px-4 backdrop-blur-sm"><div className="w-full max-w-lg rounded-3xl bg-white p-6 shadow-2xl"><div className="mb-4 flex items-start justify-between"><div><h2 className="text-2xl font-black">댓글</h2><p className="mt-1 text-sm text-slate-500">{commentPost.species} · {commentPost.location}</p></div><button onClick={() => setCommentPost(null)} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X className="h-5 w-5" /></button></div>{commentPost.isSample ? <p className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">샘플 게시글에는 댓글을 저장하지 않습니다. 실제 업로드된 게시글에서 댓글 기능을 테스트할 수 있습니다.</p> : <><div className="max-h-72 space-y-3 overflow-auto rounded-2xl bg-slate-50 p-4">{comments.length === 0 ? <p className="text-sm text-slate-500">아직 댓글이 없습니다.</p> : comments.map((c) => <div key={c.id} className="rounded-xl bg-white p-3 text-sm text-slate-700"><div className="mb-2 flex items-center gap-2"><div className="grid h-7 w-7 place-items-center overflow-hidden rounded-full bg-blue-50 text-xs">{c.avatar?.startsWith("http") ? <img src={c.avatar} alt={`${c.user || "사용자"} 프로필`} className="h-full w-full object-cover" /> : c.avatar}</div><div><p className="text-xs font-black text-slate-800">{c.user || "Ho-cha 사용자"}</p><p className="text-[11px] text-slate-400">{formatDate(c.created_at)}</p></div></div><p>{c.content}</p></div>)}</div><div className="mt-4 flex gap-2"><Input value={commentText} onChange={(e) => setCommentText(e.target.value)} placeholder="댓글을 입력하세요" className="rounded-xl border-slate-200 bg-slate-50" /><Button onClick={addComment} className="rounded-xl bg-blue-600 font-bold hover:bg-blue-700">등록</Button></div></>}</div></div>}
 
       <footer className="mt-10 bg-slate-950 text-white"><div className="mx-auto flex max-w-7xl flex-col gap-5 px-5 py-8 md:flex-row md:items-center md:justify-between"><p className="text-3xl font-black">Ho-cha</p><div className="flex flex-wrap gap-6 text-sm text-slate-300"><button>이용약관</button><button>개인정보처리방침</button><button>운영정책</button><button>문의하기</button></div><p className="text-sm text-slate-400">© 2026 Ho-cha. All rights reserved.</p></div></footer>
     </div>
